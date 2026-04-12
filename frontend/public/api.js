@@ -7,13 +7,12 @@
 const API_BASE = '/api'; // mismo origen → Railway sirve front y back juntos
 
 // ── Token JWT ─────────────────────────────────────────────────────
+// Siempre guardamos en localStorage para que la sesión persista
+// entre recargas de página. El usuario puede cerrar sesión manualmente.
 const TokenStore = {
-  get()        { return sessionStorage.getItem('mb_jwt') || localStorage.getItem('mb_jwt'); },
-  set(t, remember) {
-    sessionStorage.setItem('mb_jwt', t);
-    if (remember) localStorage.setItem('mb_jwt', t);
-  },
-  clear()      { sessionStorage.removeItem('mb_jwt'); localStorage.removeItem('mb_jwt'); },
+  get()    { return localStorage.getItem('mb_jwt'); },
+  set(t)   { localStorage.setItem('mb_jwt', t); },
+  clear()  { localStorage.removeItem('mb_jwt'); },
 };
 
 // ── Fetch helper ──────────────────────────────────────────────────
@@ -48,9 +47,9 @@ const del    = (path)        => apiFetch('DELETE', path);
 const API = {
 
   // AUTH
-  async login(username, password, remember = false) {
+  async login(username, password) {
     const data = await post('/auth/login', { username, password });
-    TokenStore.set(data.token, remember);
+    TokenStore.set(data.token);
     return data.user;
   },
   logout() { TokenStore.clear(); },
