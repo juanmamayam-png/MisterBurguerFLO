@@ -85,10 +85,9 @@ function bootUser() {
 async function doLogin() {
   const username  = $('l-user').value.trim();
   const password  = $('l-pass').value.trim();
-  const remember  = $('l-remember')?.checked || false;
   if (!username || !password) { toast('Completa usuario y contraseña', 'error'); return; }
   try {
-    State.user = await API.login(username, password, remember);
+    State.user = await API.login(username, password);
     toast(`Bienvenido, ${State.user.name} 👋`, 'success');
     bootUser();
   } catch (err) {
