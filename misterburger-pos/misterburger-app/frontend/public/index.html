@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Mister Burger · Sistema POS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-logo"><i class="fa-solid fa-burger"></i></div>
+  <h1 class="splash-title">MISTER<span>BURGER</span></h1>
+  <div class="splash-bar"><div class="splash-fill"></div></div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- ══ APP CLIENTE ══ -->
+<div id="app-client" class="app hidden">
+  <header class="cn">
+    <div class="cn__brand" onclick="clientNav('menu')">
+      <i class="fa-solid fa-burger"></i>
+      <span>MISTER<em>BURGER</em></span>
+    </div>
+    <nav class="cn__links">
+      <button class="cn__link active" onclick="clientNav('menu',this)"><i class="fa-solid fa-utensils"></i>Menú</button>
+      <button class="cn__link" onclick="clientNav('about',this)"><i class="fa-solid fa-store"></i>Nosotros</button>
+      <button class="cn__link" onclick="clientNav('contact',this)"><i class="fa-solid fa-location-dot"></i>Contacto</button>
+      <button class="cn__link cn__link--wa" onclick="clientNav('delivery',this)"><i class="fa-brands fa-whatsapp"></i>Domicilios</button>
+    </nav>
+    <div class="cn__end">
+      <div id="cn-status" class="status-pill closed"><span class="dot"></span><span>Cerrado</span></div>
+      <button class="pill-btn" onclick="showLogin()"><i class="fa-solid fa-lock"></i> Personal</button>
+    </div>
+    <button class="cn__ham" onclick="toggleMob()"><i class="fa-solid fa-bars"></i></button>
+  </header>
+
+  <div id="mob-menu" class="mob-menu hidden">
+    <button onclick="clientNav('menu');toggleMob()"><i class="fa-solid fa-utensils"></i>Menú</button>
+    <button onclick="clientNav('about');toggleMob()"><i class="fa-solid fa-store"></i>Nosotros</button>
+    <button onclick="clientNav('contact');toggleMob()"><i class="fa-solid fa-location-dot"></i>Contacto</button>
+    <button onclick="clientNav('delivery');toggleMob()"><i class="fa-brands fa-whatsapp"></i>Domicilios</button>
+    <button onclick="showLogin();toggleMob()"><i class="fa-solid fa-lock"></i>Personal</button>
+  </div>
+
+  <main class="c-main">
+    <!-- MENÚ PÚBLICO -->
+    <div id="cp-menu" class="c-page active">
+      <section class="hero">
+        <div class="hero__bg"></div>
+        <div class="hero__content">
+          <span class="hero__badge"><i class="fa-solid fa-fire-flame-curved"></i> Fast Food Premium</span>
+          <h1 class="hero__title">MISTER<br><span>BURGER</span></h1>
+          <p class="hero__sub">Florencia · Caquetá · El sabor que enamora</p>
+        </div>
+        <div class="hero__scroll" onclick="document.getElementById('menu-bar').scrollIntoView({behavior:'smooth'})">
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="closed-banner" class="closed-banner hidden">
+          <i class="fa-solid fa-moon"></i> Estamos cerrados — vuelve pronto 🍔
+        </div>
+      </section>
+
+      <div class="menu-bar" id="menu-bar">
+        <div class="menu-filters" id="menu-filters">
+          <button class="mf active" onclick="filterMenu('all',this)"><i class="fa-solid fa-border-all"></i>Todos</button>
+          <button class="mf" onclick="filterMenu('Hamburguesas',this)"><i class="fa-solid fa-burger"></i>Hamburguesas</button>
+          <button class="mf" onclick="filterMenu('Especiales',this)"><i class="fa-solid fa-star"></i>Especiales</button>
+          <button class="mf" onclick="filterMenu('Hot Dog',this)"><i class="fa-solid fa-hotdog"></i>Hot Dogs</button>
+          <button class="mf" onclick="filterMenu('Bebidas',this)"><i class="fa-solid fa-wine-glass"></i>Bebidas</button>
+          <button class="mf" onclick="filterMenu('Infantil',this)"><i class="fa-solid fa-children"></i>Infantil</button>
+          <button class="mf" onclick="filterMenu('Entradas',this)"><i class="fa-solid fa-bowl-food"></i>Entradas</button>
+        </div>
+        <div class="menu-search"><i class="fa-solid fa-magnifying-glass"></i><input id="menu-search" type="text" placeholder="Buscar…" oninput="filterMenu(null,null,this.value)"></div>
+      </div>
+
+      <div class="menu-combo-bar">🍟 <strong>Pídelas en combo +$10.000</strong> · Incluye papas y bebida</div>
+      <div class="menu-grid" id="menu-grid"></div>
+    </div>
+
+    <!-- NOSOTROS -->
+    <div id="cp-about" class="c-page">
+      <div class="info-hero"><h2>Nuestra Historia</h2><p>Desde el Caquetá para el mundo</p></div>
+      <div class="info-grid">
+        <div class="info-card"><i class="fa-solid fa-heart"></i><h3>Pasión</h3><p>Hamburguesas artesanales con ingredientes frescos y 100% carne de res en cada producto.</p></div>
+        <div class="info-card"><i class="fa-solid fa-award"></i><h3>Calidad</h3><p>Más de 57 opciones, dos pisos y atención personalizada. El fast food premium de Florencia.</p></div>
+        <div class="info-card"><i class="fa-solid fa-people-group"></i><h3>Familia</h3><p>Combos infantiles, especiales únicos, bebidas amazónicas. Un lugar para todos.</p></div>
+        <div class="info-card"><i class="fa-solid fa-building"></i><h3>2 Pisos</h3><p>14 mesas en Piso 1 · 23 mesas en Piso 2. Ambiente acogedor y moderno.</p></div>
+      </div>
+    </div>
+
+    <!-- CONTACTO -->
+    <div id="cp-contact" class="c-page">
+      <div class="info-hero"><h2>Encuéntranos</h2><p>Siempre cerca de ti</p></div>
+
+      <!-- ── Mapa principal ── -->
+      <div class="contact-map-section">
+
+        <div class="contact-map-wrap">
+          <!-- Google Maps embed — Florencia, Caquetá, Colombia (Calle 21A / Barrio Los Alpes) -->
+          <iframe
+            class="contact-map-iframe"
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3984.1!2d-75.6183!3d1.6144!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8e25b3a1a1a1a1a1%3A0x1!2sCalle+21A+%233A+Bis-11-13%2C+Florencia%2C+Caquet%C3%A1!5e0!3m2!1ses!2sco!4v1"
+            allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+            title="Ubicación Mister Burger Florencia">
+          </iframe>
+          <!-- Overlay con pin y botón de abrir en Maps -->
+          <div class="contact-map-overlay">
+            <div class="contact-map-pin">
+              <i class="fa-solid fa-burger"></i>
+            </div>
+            <div class="contact-map-label">
+              <strong>Mister Burger</strong>
+              <span>Calle 21A No. 3A Bis-11-13 · Barrio Los Alpes</span>
+            </div>
+            <a class="contact-map-open"
+               href="https://www.google.com/maps/search/Mister+Burger+Florencia+Caqueta+Calle+21A+3A+Bis-11-13+Barrio+Los+Alpes/@1.6144,-75.6183,17z"
+               target="_blank" rel="noopener noreferrer">
+              <i class="fa-solid fa-diamond-turn-right"></i>
+              Abrir en Google Maps
+            </a>
+          </div>
+        </div>
+
+        <!-- Dirección detallada al lado del mapa -->
+        <div class="contact-address-panel">
+          <div class="cap-logo"><i class="fa-solid fa-burger"></i></div>
+          <h3>Mister Burger</h3>
+          <p class="cap-sub">Fast Food Premium · Florencia, Caquetá</p>
+
+          <div class="cap-row">
+            <i class="fa-solid fa-location-dot"></i>
+            <div>
+              <strong>Dirección</strong>
+              <span>Calle 21A No. 3A Bis-11-13<br>Barrio Los Alpes<br>Diagonal C.C. Gran Plaza<br>Frente a Hotel Grand Gold<br>Florencia, Caquetá</span>
+            </div>
+          </div>
+
+          <div class="cap-row">
+            <i class="fa-solid fa-clock"></i>
+            <div>
+              <strong>Horario</strong>
+              <span>Lunes – Domingo<br>11:00 am · 10:00 pm</span>
+            </div>
+          </div>
+
+          <div class="cap-row">
+            <i class="fa-brands fa-whatsapp"></i>
+            <div>
+              <strong>Domicilios</strong>
+              <span>
+                <a href="https://wa.me/573153864258" target="_blank" class="cap-wa-link">315 386 4258</a> · Sede Alpes<br>
+                <a href="https://wa.me/573223860553" target="_blank" class="cap-wa-link">322 386 0553</a> · Zona Rosa
+              </span>
+            </div>
+          </div>
+
+          <!-- Botones de acción -->
+          <div class="cap-actions">
+            <a class="cap-btn cap-btn--maps"
+               href="https://www.google.com/maps/search/Mister+Burger+Florencia+Caqueta+Calle+21A+3A+Bis-11-13+Barrio+Los+Alpes/@1.6144,-75.6183,17z"
+               target="_blank" rel="noopener noreferrer">
+              <i class="fa-solid fa-diamond-turn-right"></i>
+              Cómo llegar
+            </a>
+            <a class="cap-btn cap-btn--wa"
+               href="https://wa.me/573153864258?text=Hola%20Mister%20Burger%20%F0%9F%8D%94%20Quiero%20hacer%20un%20pedido"
+               target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-whatsapp"></i>
+              Escribir ahora
+            </a>
+          </div>
+
+        </div>
+      </div><!-- /contact-map-section -->
+
+      <!-- ── Resto de la info ── -->
+      <div class="info-grid" style="max-width:900px;margin:0 auto">
+        <div class="info-card"><i class="fa-brands fa-instagram"></i><h3>Redes Sociales</h3><p>Facebook: Mister Burger Florencia<br>Instagram: @misterburger_florencia</p></div>
+        <div class="info-card"><i class="fa-solid fa-credit-card"></i><h3>Métodos de Pago</h3><p>Nequi: 321 987 8214<br>Bancolombia: 223619704-74<br><em>Sin datafono</em></p></div>
+      </div>
+
+    </div>
+
+    <!-- DOMICILIOS -->
+    <div id="cp-delivery" class="c-page">
+
+      <section class="del-hero">
+        <div class="del-hero__bg"></div>
+        <div class="del-hero__content">
+          <span class="del-hero__badge"><i class="fa-brands fa-whatsapp"></i> Pedidos a Domicilio</span>
+          <h1>¿SE TE ANTOJÓ?</h1>
+          <p>Te llevamos el mejor sabor hasta tu puerta 🚀</p>
+        </div>
+      </section>
+
+      <!-- Horario y zona -->
+      <div class="del-info-bar">
+        <div class="del-info-bar__item"><i class="fa-solid fa-clock"></i><span>Lun – Dom · 11:00 am – 10:00 pm</span></div>
+        <div class="del-info-bar__item"><i class="fa-solid fa-location-dot"></i><span>Florencia, Caquetá</span></div>
+        <div class="del-info-bar__item"><i class="fa-solid fa-motorcycle"></i><span>Domicilio disponible</span></div>
+      </div>
+
+      <!-- Sedes con botones de WhatsApp -->
+      <div class="del-sedes">
+
+        <!-- Sede Alpes -->
+        <div class="del-card">
+          <div class="del-card__header">
+            <div class="del-card__icon"><i class="fa-solid fa-store"></i></div>
+            <div>
+              <h3>Sede Los Alpes</h3>
+              <p>Calle 21A No. 3A Bis-11-13 · Barrio Los Alpes<br>Diagonal C.C. Gran Plaza · Florencia</p>
+            </div>
+          </div>
+          <div class="del-card__number">
+            <i class="fa-brands fa-whatsapp"></i>
+            <span>315 386 4258</span>
+          </div>
+          <a class="del-wa-btn"
+             href="https://wa.me/573153864258?text=Hola%20Mister%20Burger%20%F0%9F%8D%94%20Quiero%20hacer%20un%20pedido%20a%20domicilio"
+             target="_blank" rel="noopener noreferrer">
+            <i class="fa-brands fa-whatsapp"></i>
+            Pedir por WhatsApp — Sede Alpes
+          </a>
+          <p class="del-card__hint">Al abrir WhatsApp ya tendrás el mensaje listo, solo envíalo y dinos qué deseas 😊</p>
+        </div>
+
+        <!-- Sede Zona Rosa -->
+        <div class="del-card">
+          <div class="del-card__header">
+            <div class="del-card__icon del-card__icon--2"><i class="fa-solid fa-store"></i></div>
+            <div>
+              <h3>Sede Zona Rosa</h3>
+              <p>Florencia, Caquetá<br>Zona Rosa · Mister Burger</p>
+            </div>
+          </div>
+          <div class="del-card__number">
+            <i class="fa-brands fa-whatsapp"></i>
+            <span>322 386 0553</span>
+          </div>
+          <a class="del-wa-btn"
+             href="https://wa.me/573223860553?text=Hola%20Mister%20Burger%20%F0%9F%8D%94%20Quiero%20hacer%20un%20pedido%20a%20domicilio"
+             target="_blank" rel="noopener noreferrer">
+            <i class="fa-brands fa-whatsapp"></i>
+            Pedir por WhatsApp — Zona Rosa
+          </a>
+          <p class="del-card__hint">Al abrir WhatsApp ya tendrás el mensaje listo, solo envíalo y dinos qué deseas 😊</p>
+        </div>
+
+      </div><!-- /del-sedes -->
+
+      <!-- Cómo funciona -->
+      <div class="del-steps-section">
+        <h2>¿Cómo pedir?</h2>
+        <div class="del-steps">
+          <div class="del-step">
+            <div class="del-step__num">1</div>
+            <div class="del-step__icon"><i class="fa-solid fa-utensils"></i></div>
+            <h4>Elige tus productos</h4>
+            <p>Revisa el menú aquí mismo y anota lo que quieres pedir</p>
+          </div>
+          <div class="del-step-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+          <div class="del-step">
+            <div class="del-step__num">2</div>
+            <div class="del-step__icon"><i class="fa-brands fa-whatsapp"></i></div>
+            <h4>Escríbenos</h4>
+            <p>Usa el botón de WhatsApp de la sede más cercana a tu ubicación</p>
+          </div>
+          <div class="del-step-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+          <div class="del-step">
+            <div class="del-step__num">3</div>
+            <div class="del-step__icon"><i class="fa-solid fa-motorcycle"></i></div>
+            <h4>Espera en casa</h4>
+            <p>Confirmamos tu pedido y lo llevamos directo a tu puerta 🚀</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Métodos de pago domicilio -->
+      <div class="del-pay-section">
+        <h2>Métodos de Pago</h2>
+        <div class="del-pay-grid">
+          <div class="del-pay-card">
+            <i class="fa-solid fa-money-bill-wave"></i>
+            <h4>Efectivo</h4>
+            <p>Pago al recibir el pedido</p>
+          </div>
+          <div class="del-pay-card">
+            <i class="fa-solid fa-mobile-screen"></i>
+            <h4>Nequi</h4>
+            <p>321 987 8214</p>
+          </div>
+          <div class="del-pay-card">
+            <i class="fa-solid fa-building-columns"></i>
+            <h4>Bancolombia</h4>
+            <p>No. 223619704-74<br>Cuenta de Ahorro</p>
+          </div>
+        </div>
+        <p class="del-pay-note"><i class="fa-solid fa-circle-info"></i> No contamos con servicio de datáfono</p>
+      </div>
+
+      <!-- CTA final -->
+      <div class="del-cta">
+        <p>¿Tienes dudas sobre los productos?</p>
+        <button class="pill-btn pill-btn--ghost" onclick="clientNav('menu',document.querySelector('.cn__link'))">
+          <i class="fa-solid fa-utensils"></i> Ver el Menú Completo
+        </button>
+      </div>
+
+    </div><!-- /cp-delivery -->
+  </main>
+</div>
+
+<!-- ══ APP STAFF (Jefe / Mesero) ══ -->
+<div id="app-staff" class="app hidden">
+  <header class="st-bar">
+    <div class="st-bar__l">
+      <button class="st-toggle" id="sb-toggle" onclick="toggleSidebar()" title="Menú lateral">
+        <i class="fa-solid fa-bars-staggered"></i>
+      </button>
+      <div class="st-brand"><i class="fa-solid fa-burger"></i><span>MB<b>·</b>POS</span></div>
+    </div>
+    <div class="st-bar__c">
+      <div class="st-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="st-search" type="text" placeholder="Buscar mesa, producto…"
+               oninput="staffSearch(this.value)" onfocus="openSSearch()" onblur="closeSSearch()">
+        <div id="ss-drop" class="ss-drop hidden"></div>
+      </div>
+    </div>
+    <div class="st-bar__r">
+      <div id="st-status" class="status-pill closed"><span class="dot"></span><span id="st-status-txt">Cerrado</span></div>
+      <div id="st-user" class="st-user"></div>
+    </div>
+  </header>
+
+  <!-- Overlay para cerrar sidebar en móvil -->
+  <div id="sb-overlay" class="sb-overlay hidden" onclick="closeSidebarMobile()"></div>
+
+  <div class="st-layout">
+    <aside class="st-sidebar" id="st-sidebar">
+      <div class="st-sidebar__profile" id="st-profile"></div>
+      <nav class="st-nav" id="st-nav"></nav>
+      <div class="st-sidebar__bottom">
+        <button class="st-nav__item danger" onclick="logout()">
+          <i class="fa-solid fa-right-from-bracket"></i><span>Cerrar Sesión</span>
+        </button>
+      </div>
+    </aside>
+    <main class="st-content" id="st-content"></main>
+  </div>
+</div>
+
+<!-- ══ APP COCINA ══ -->
+<div id="app-kitchen" class="app hidden">
+  <header class="kitch-bar">
+    <div class="kitch-bar__brand">
+      <i class="fa-solid fa-fire-burner"></i>
+      <span>COCINA · MISTER BURGER</span>
+    </div>
+    <div class="kitch-bar__r">
+      <div id="kitch-status" class="status-pill closed"><span class="dot"></span><span>Cerrado</span></div>
+      <button class="pill-btn pill-btn--sm" id="kitch-sound-btn" onclick="toggleKitchSound()" title="Sonido alerta">
+        <i class="fa-solid fa-bell"></i>
+      </button>
+      <button class="pill-btn pill-btn--sm" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </header>
+
+  <div class="kitch-tabs">
+    <button class="kitch-tab active" id="ktab-food" onclick="kitchTab('food',this)">
+      <i class="fa-solid fa-burger"></i> Comida
+      <span class="kitch-count" id="kc-food">0</span>
+    </button>
+    <button class="kitch-tab" id="ktab-drinks" onclick="kitchTab('drinks',this)">
+      <i class="fa-solid fa-wine-glass"></i> Bebidas
+      <span class="kitch-count" id="kc-drinks">0</span>
+    </button>
+  </div>
+
+  <div id="kitch-content" class="kitch-content"></div>
+</div>
+
+<!-- ══ LOGIN ══ -->
+<div id="app-login" class="app hidden">
+  <div class="login-wrap">
+    <div class="login-deco"></div>
+    <div class="login-card">
+      <div class="login-logo"><i class="fa-solid fa-burger"></i><div><h2>MISTER BURGER</h2><p>Sistema POS</p></div></div>
+      <h3>Bienvenido de vuelta</h3>
+      <div class="field-g"><label>Usuario</label>
+        <div class="field-i"><i class="fa-solid fa-user"></i>
+          <input id="l-user" type="text" placeholder="usuario" onkeyup="if(event.key==='Enter')doLogin()">
+        </div>
+      </div>
+      <div class="field-g"><label>Contraseña</label>
+        <div class="field-i"><i class="fa-solid fa-lock"></i>
+          <input id="l-pass" type="password" placeholder="••••••••" onkeyup="if(event.key==='Enter')doLogin()">
+        </div>
+      </div>
+      <label class="remember-me"><input type="checkbox" id="l-remember"> Recordarme en este dispositivo</label>
+      <button class="pill-btn pill-btn--accent full" onclick="doLogin()">
+        <i class="fa-solid fa-arrow-right-to-bracket"></i> Ingresar
+      </button>
+      <button class="pill-btn full mt-s" onclick="showApp('client')">
+        <i class="fa-solid fa-arrow-left"></i> Volver al Menú
+      </button>
+      <div class="login-hint">
+        <span><b>Mesero:</b> mesero / 1234</span>
+        <span><b>Cocina:</b> cocina / 1234</span>
+        <span><b>Jefe:</b> jefe / admin</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODALES ══ -->
+
+<!-- Producto -->
+<div id="modal-product" class="modal-wrap hidden">
+  <div class="modal-box wide">
+    <div class="mh"><h3 id="mp-title">Nuevo Producto</h3><button class="mc" onclick="closeModal('modal-product')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mb scroll">
+      <div class="img-up" id="img-up" onclick="document.getElementById('img-file').click()">
+        <div class="img-up__prev" id="img-prev"><span id="img-eph" style="font-size:48px">🍔</span></div>
+        <div class="img-up__txt">
+          <p><i class="fa-solid fa-camera-retro"></i> Foto del producto</p>
+          <small>JPG · PNG · WEBP · máx 2 MB</small>
+          <button type="button" class="pill-btn pill-btn--sm mt-s" onclick="event.stopPropagation();clearImg()"><i class="fa-solid fa-trash"></i> Quitar</button>
+        </div>
+        <input type="file" id="img-file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="loadImg(this)">
+        <input type="hidden" id="mp-img">
+      </div>
+      <div class="mg2">
+        <div class="field-g full"><label>Nombre</label><input id="mp-name" class="field-c" placeholder="Hamburguesa Clásica"></div>
+        <div class="field-g full"><label>Descripción / Ingredientes</label><input id="mp-desc" class="field-c" placeholder="Pan artesanal, queso, carne 150g…"></div>
+        <div class="field-g"><label>Emoji (respaldo)</label><input id="mp-emoji" class="field-c" placeholder="🍔"></div>
+        <div class="field-g"><label>Categoría</label>
+          <select id="mp-cat" class="field-c">
+            <option>Hamburguesas</option><option>Especiales</option><option>Hot Dog</option>
+            <option>Bebidas</option><option>Infantil</option><option>Entradas</option>
+          </select>
+        </div>
+        <div class="field-g"><label>Precio de venta (COP)</label><input id="mp-price" class="field-c" type="number" placeholder="15000"></div>
+        <div class="field-g"><label>Costo producción (COP)</label><input id="mp-cost" class="field-c" type="number" placeholder="7000"></div>
+        <div class="field-g"><label>Estado</label>
+          <select id="mp-status" class="field-c">
+            <option value="active">Activo</option><option value="inactive">Inactivo</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="pill-btn pill-btn--accent" onclick="saveProduct()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+      <button class="pill-btn" onclick="closeModal('modal-product')">Cancelar</button>
+    </div>
+    <input type="hidden" id="mp-id">
+  </div>
+</div>
+
+<!-- Agregar al pedido -->
+<div id="modal-add" class="modal-wrap hidden">
+  <div class="modal-box">
+    <div class="mh"><h3 id="ma-title">Agregar</h3><button class="mc" onclick="closeModal('modal-add')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mb" style="text-align:center">
+      <div id="ma-vis" class="ma-vis"></div>
+      <p id="ma-desc" class="ma-desc"></p>
+      <p id="ma-price" class="ma-price"></p>
+      <div class="qty-ctrl">
+        <button onclick="changeQty(-1)">−</button>
+        <span id="ma-qty">1</span>
+        <button onclick="changeQty(1)">+</button>
+      </div>
+      <div class="field-g" style="text-align:left;margin-top:16px">
+        <label>Notas (opcional)</label>
+        <input id="ma-notes" class="field-c" placeholder="Sin cebolla, extra salsa…">
+      </div>
+    </div>
+    <div class="mf"><button class="pill-btn pill-btn--accent full" onclick="confirmAdd()"><i class="fa-solid fa-plus"></i> Agregar al Pedido</button></div>
+    <input type="hidden" id="ma-pid">
+  </div>
+</div>
+
+<!-- Cobrar -->
+<div id="modal-pay" class="modal-wrap hidden">
+  <div class="modal-box">
+    <div class="mh"><h3>💳 Confirmar Pago</h3><button class="mc" onclick="closeModal('modal-pay')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mb">
+      <div id="pay-sum" class="pay-sum"></div>
+      <div class="field-g mt-s"><label>Método de pago</label>
+        <select id="pay-meth" class="field-c">
+          <option value="efectivo">💵 Efectivo</option>
+          <option value="nequi">📱 Nequi</option>
+          <option value="bancolombia">🏦 Bancolombia</option>
+          <option value="tarjeta">💳 Tarjeta</option>
+        </select>
+      </div>
+      <div class="field-g"><label>Monto recibido (opcional)</label>
+        <input id="pay-recv" class="field-c" type="number" placeholder="50000" oninput="calcChange()">
+      </div>
+      <div id="pay-change" class="pay-change hidden"></div>
+    </div>
+    <div class="mf">
+      <button class="pill-btn pill-btn--green full" onclick="confirmPay()"><i class="fa-solid fa-circle-check"></i> Confirmar y Liberar Mesa</button>
+      <button class="pill-btn" onclick="closeModal('modal-pay')">Cancelar</button>
+    </div>
+    <input type="hidden" id="pay-oid">
+  </div>
+</div>
+
+<!-- Cambiar mesa -->
+<div id="modal-move" class="modal-wrap hidden">
+  <div class="modal-box">
+    <div class="mh"><h3>Cambiar Mesa</h3><button class="mc" onclick="closeModal('modal-move')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mb"><p class="modal-hint">Selecciona la mesa destino:</p>
+      <div id="move-grid" style="max-height:360px;overflow-y:auto"></div>
+    </div>
+    <div class="mf">
+      <button class="pill-btn pill-btn--accent" onclick="confirmMove()"><i class="fa-solid fa-arrows-alt"></i> Mover</button>
+      <button class="pill-btn" onclick="closeModal('modal-move')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Abrir jornada -->
+<div id="modal-open" class="modal-wrap hidden">
+  <div class="modal-box wide">
+    <div class="mh"><h3>🏪 Abrir Jornada</h3><button class="mc" onclick="closeModal('modal-open')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mb scroll">
+      <p class="modal-hint">Registra las compras/inversiones del día antes de empezar:</p>
+      <div id="inv-rows"></div>
+      <button class="pill-btn pill-btn--sm mt-s" onclick="addInvRow()"><i class="fa-solid fa-plus"></i> Agregar ítem</button>
+      <div class="inv-total"><span>Total inversión:</span><strong id="inv-total">$0</strong></div>
+      <div class="field-g mt-s"><label>Notas de apertura</label>
+        <input id="open-notes" class="field-c" placeholder="Promociones, eventos especiales…">
+      </div>
+    </div>
+    <div class="mf"><button class="pill-btn pill-btn--green full" onclick="confirmOpen()"><i class="fa-solid fa-store"></i> Abrir Local y Comenzar</button></div>
+  </div>
+</div>
+
+<!-- Cerrar jornada -->
+<div id="modal-close-day" class="modal-wrap hidden">
+  <div class="modal-box">
+    <div class="mh"><h3>🔒 Cerrar Jornada</h3><button class="mc" onclick="closeModal('modal-close-day')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mb">
+      <div id="close-sum"></div>
+      <div class="field-g mt-s"><label>Notas del cierre</label>
+        <input id="close-notes" class="field-c" placeholder="Incidencias, observaciones…">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="pill-btn pill-btn--danger full" onclick="confirmClose()"><i class="fa-solid fa-lock"></i> Confirmar Cierre</button>
+      <button class="pill-btn" onclick="closeModal('modal-close-day')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
