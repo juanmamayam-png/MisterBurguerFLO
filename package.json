@@ -1,0 +1,28 @@
+{
+  "name": "misterburger-pos",
+  "version": "1.0.0",
+  "description": "Mister Burger POS — Sistema completo de punto de venta",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "nodemon backend/src/server.js",
+    "db:migrate": "node backend/src/db/migrate.js",
+    "db:seed": "node backend/src/db/seed.js",
+    "setup": "node backend/src/db/migrate.js && node backend/src/db/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
