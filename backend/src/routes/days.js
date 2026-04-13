@@ -5,6 +5,20 @@ const { query, pool }       = require('../db/pool');
 const { auth, requireRole } = require('../middleware/auth');
 const { validators, validId } = require('../middleware/validate');
 
+// GET /api/days/status — estado público del local (SIN autenticación)
+// Solo indica si está abierto o cerrado, sin datos financieros
+router.get('/status', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT id, date_label, opened_at FROM work_days WHERE status='open' ORDER BY id DESC LIMIT 1`
+    );
+    const day = r.rows[0];
+    res.json({ open: !!day, date_label: day?.date_label || null, opened_at: day?.opened_at || null });
+  } catch(err) {
+    res.json({ open: false });
+  }
+});
+
 // GET /api/days
 router.get('/', auth, requireRole('boss'), async (req, res) => {
   try {
