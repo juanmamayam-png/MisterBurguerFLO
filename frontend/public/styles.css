@@ -1100,3 +1100,19 @@ h1,h2,h3,h4{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
 
 /* ── Floor tabs wrapping on small screens ── */
 .floor-tabs { flex-wrap: wrap; }
+
+/* ── Cocina: divisor Bebidas dentro de la tarjeta ── */
+.ki-divider {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  color: var(--green); letter-spacing: .5px;
+  margin: 8px 0 4px;
+  opacity: .7;
+}
+.ki-divider i { font-size: 12px; }
+
+/* ── Ítem de bebida — fondo ligeramente diferente ── */
+.ko-item--drink {
+  background: rgba(62,184,122,.06) !important;
+  border-color: rgba(62,184,122,.18) !important;
+}
