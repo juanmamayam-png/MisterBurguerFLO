@@ -86,6 +86,9 @@ const API = {
   moveOrder(orderId, new_table_id) {
     return patch(`/orders/${orderId}/move`, { new_table_id });
   },
+  cancelOrder(orderId) {
+    return patch(`/orders/${orderId}/cancel`);
+  },
   getKitchenOrders() { return get('/orders/kitchen'); },
 
   // WORK DAYS
