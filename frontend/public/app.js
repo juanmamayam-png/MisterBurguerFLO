@@ -1350,14 +1350,30 @@ async function renderReports(c) {
 function bootKitchen() {
   showApp('kitchen');
   State.knownOrders = [];
-  // Consultar estado del local antes de mostrar badges
-  fetch('/api/days/status', { cache:'no-store' })
-    .then(r => r.ok ? r.json() : {})
-    .then(s => { State.currentDay = s.open ? s : null; updateLocalBadges(); })
-    .catch(() => { State.currentDay = null; updateLocalBadges(); });
+
+  // ── Función independiente para actualizar el badge del local ──
+  async function kitchCheckStatus() {
+    try {
+      const r = await fetch('/api/days/status', { cache:'no-store' });
+      const s = r.ok ? await r.json().catch(()=>({})) : {};
+      const prevOpen = !!State.currentDay;
+      State.currentDay = s.open ? s : null;
+      if (prevOpen !== !!State.currentDay) updateLocalBadges();
+    } catch {}
+  }
+
+  // Consultar estado inmediatamente al arrancar
+  kitchCheckStatus().then(() => updateLocalBadges());
+
   renderKitchen();
   if (State.kitchTimer) clearInterval(State.kitchTimer);
+
+  // Timer de pedidos (cada 8s) — independiente del estado del local
   State.kitchTimer = setInterval(async () => {
+    // 1. Siempre actualizar el estado del local primero (no necesita token)
+    await kitchCheckStatus();
+
+    // 2. Luego intentar cargar pedidos (necesita token)
     try {
       const orders = await API.getKitchenOrders();
       if (!Array.isArray(orders)) return;
@@ -1366,14 +1382,7 @@ function bootKitchen() {
       if (newIds.length) { if (_kitchSound) playKitchBeep(); toast(`¡${newIds.length} pedido(s) nuevo(s)!`,'warning'); }
       State.knownOrders = orders.map(o=>o.id);
       _renderKitchenOrders(orders);
-      // Actualizar estado del local cada ciclo (8s) — sin token necesario
-      const prevOpen = !!State.currentDay;
-      const dr = await fetch('/api/days/status', { cache:'no-store' }).catch(()=>null);
-      if (dr && dr.ok) { const s = await dr.json().catch(()=>({})); State.currentDay = s.open ? s : null; }
-      else if (!dr) State.currentDay = null;
-      if (prevOpen !== !!State.currentDay) updateLocalBadges();
     } catch {
-      // Sin conexión: mostrar último estado conocido
       const cached = Cache.get('mb_kitch_orders', 60 * 60 * 1000);
       if (cached) _renderKitchenOrders(cached);
     }
