@@ -218,9 +218,17 @@ async function apiFetch(method, path, body = null) {
     const res = await fetch(`${API_BASE}${path}`, opts);
 
     if (res.status === 401) {
+      const errData = await res.json().catch(() => ({}));
       TokenStore.clear();
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-      const err = new Error('Sesión expirada'); err.status = 401; throw err;
+      // Diferenciar entre sesión desplazada y token expirado
+      if (errData.code === 'SESSION_DISPLACED') {
+        window.dispatchEvent(new CustomEvent('auth:displaced'));
+      } else {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+      }
+      const err = new Error(errData.error || 'Sesión expirada');
+      err.status = 401;
+      throw err;
     }
 
     const data = await res.json().catch(() => ({}));
@@ -295,7 +303,18 @@ const API = {
     Cache.set(Cache.K.user, data.user);
     return data.user;
   },
-  logout() { TokenStore.clear(); Cache.del(Cache.K.user); },
+  logout() {
+    // Invalidar sesión en el servidor también
+    const token = TokenStore.get();
+    if (token) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+      }).catch(() => {});
+    }
+    TokenStore.clear();
+    Cache.del(Cache.K.user);
+  },
   async me() {
     try {
       const u = await get('/auth/me');
