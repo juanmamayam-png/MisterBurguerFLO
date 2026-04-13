@@ -42,10 +42,23 @@ CREATE TABLE IF NOT EXISTS tables (
   id          SERIAL PRIMARY KEY,
   number      INTEGER      NOT NULL,
   floor       INTEGER      NOT NULL DEFAULT 1,
+  table_type  VARCHAR(20)  NOT NULL DEFAULT 'mesa'
+                CHECK (table_type IN ('mesa','domicilio','para_llevar')),
   status      VARCHAR(30)  NOT NULL DEFAULT 'free'
                 CHECK (status IN ('free','occupied','pending')),
-  UNIQUE (number, floor)
+  UNIQUE (number, floor, table_type)
 );
+
+-- Migración segura: agregar columna si no existe
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='tables' AND column_name='table_type'
+  ) THEN
+    ALTER TABLE tables ADD COLUMN table_type VARCHAR(20) NOT NULL DEFAULT 'mesa'
+      CHECK (table_type IN ('mesa','domicilio','para_llevar'));
+  END IF;
+END $$;
 
 -- ── JORNADAS (DÍAS DE TRABAJO) ──────────────────────
 CREATE TABLE IF NOT EXISTS work_days (
@@ -90,8 +103,20 @@ CREATE TABLE IF NOT EXISTS order_items (
   unit_price  INTEGER      NOT NULL,   -- precio al momento del pedido
   unit_cost   INTEGER      NOT NULL DEFAULT 0,
   notes       TEXT,
+  bread_type  VARCHAR(20)  DEFAULT NULL CHECK (bread_type IN ('pan','platano') OR bread_type IS NULL),
   status      VARCHAR(20)  NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled'))
 );
+
+-- Migración segura: agregar columna bread_type si no existe
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='order_items' AND column_name='bread_type'
+  ) THEN
+    ALTER TABLE order_items ADD COLUMN bread_type VARCHAR(20) DEFAULT NULL
+      CHECK (bread_type IN ('pan','platano') OR bread_type IS NULL);
+  END IF;
+END $$;
 
 -- ── TRANSACCIONES (contabilidad) ────────────────────
 CREATE TABLE IF NOT EXISTS transactions (
