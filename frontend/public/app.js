@@ -200,7 +200,10 @@ async function loadCurrentDay() {
 }
 
 function updateLocalBadges() {
-  const open = !!State.currentDay;
+  // Soporta dos formatos: objeto completo de jornada, o { open: true/false } del endpoint público
+  const open = State.currentDay
+    ? (typeof State.currentDay.open === 'boolean' ? State.currentDay.open : true)
+    : false;
   const cls  = open ? 'status-pill open' : 'status-pill closed';
   const html = open ? '<span class="dot"></span><span>Abierto</span>' : '<span class="dot"></span><span>Cerrado</span>';
   ['cn-status','st-status'].forEach(id => { const el=$(id); if(el){ el.className=cls; el.innerHTML=html; }});
