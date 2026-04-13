@@ -82,6 +82,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }, 1800);
 });
 
+let _statusPollTimer = null;
+
 function bootUser() {
   if (State.user.role === 'kitchen') {
     bootKitchen();
@@ -92,7 +94,6 @@ function bootUser() {
     updateStaffUser();
     loadCurrentDay().then(() => {
       updateLocalBadges();
-      // Restaurar productos desde cache si están disponibles (para offline inmediato)
       if (!State.products.length) {
         const cached = Cache.get(Cache.K.products);
         if (cached) State.products = cached;
@@ -100,7 +101,31 @@ function bootUser() {
       if (State.user.role === 'boss') staffSection('dashboard');
       else                            staffSection('tables');
     });
+    // Iniciar polling del estado del local (cada 20 segundos)
+    _startStatusPoll();
   }
+}
+
+function _startStatusPoll() {
+  if (_statusPollTimer) clearInterval(_statusPollTimer);
+  _statusPollTimer = setInterval(async () => {
+    if (!State.user || State.user.role === 'boss') return; // El jefe no necesita polling
+    try {
+      const prevOpen = !!State.currentDay;
+      await loadCurrentDay();
+      const nowOpen  = !!State.currentDay;
+      // Si el estado cambió, actualizar la UI
+      if (prevOpen !== nowOpen) {
+        updateLocalBadges();
+        renderStaffNav();
+        if (nowOpen) {
+          toast('🏪 El local fue abierto por el Jefe', 'success');
+        } else {
+          toast('🔒 El local fue cerrado por el Jefe', 'info');
+        }
+      }
+    } catch { /* silencioso — puede ser offline */ }
+  }, 20000); // cada 20 segundos
 }
 
 /* ─────────────────────────────────────────────
@@ -132,7 +157,9 @@ async function doLogin() {
 function logout() {
   API.logout();
   State.user = null; State.selectedTable = null; State.activeOrder = null;
-  if (State.kitchTimer) { clearInterval(State.kitchTimer); State.kitchTimer = null; }
+  if (State.kitchTimer)  { clearInterval(State.kitchTimer);  State.kitchTimer  = null; }
+  if (_statusPollTimer)  { clearInterval(_statusPollTimer);  _statusPollTimer  = null; }
+  if (_clientPollTimer)  { clearInterval(_clientPollTimer);  _clientPollTimer  = null; }
   toast('Sesión cerrada', 'info');
   showApp('client');
   loadPublicMenu();
@@ -314,17 +341,44 @@ function ssPickTable(tid) {
 ───────────────────────────────────────────── */
 let _mFilter = 'all', _mSearch = '';
 
+let _clientPollTimer = null;
+
 async function loadPublicMenu() {
+  try {
+    // Consultar estado del local directamente (sin cache)
+    const headers = {};
+    const res = await fetch('/api/days/current', { headers, cache: 'no-store' });
+    if (res.ok) {
+      const day = await res.json().catch(() => null);
+      State.currentDay = day;
+    } else {
+      State.currentDay = null;
+    }
+  } catch { /* sin conexión */ }
+
   try {
     State.products = await API.getProducts({ status: 'active' });
     Cache.set(Cache.K.products, State.products);
-    renderClientMenu();
-    updateLocalBadges();
   } catch {
-    // Si no hay red, cargar desde caché
     const cached = Cache.get(Cache.K.products);
     if (cached) State.products = cached;
-    renderClientMenu();
+  }
+
+  renderClientMenu();
+  updateLocalBadges();
+
+  // Polling para la página pública: verificar estado del local cada 30 segundos
+  if (!_clientPollTimer) {
+    _clientPollTimer = setInterval(async () => {
+      if (State.user) { clearInterval(_clientPollTimer); _clientPollTimer = null; return; }
+      try {
+        const prevOpen = !!State.currentDay;
+        const res = await fetch('/api/days/current', { cache: 'no-store' });
+        if (res.ok) { State.currentDay = await res.json().catch(() => null); }
+        else State.currentDay = null;
+        if (prevOpen !== !!State.currentDay) updateLocalBadges();
+      } catch { /* silencioso */ }
+    }, 30000);
   }
 }
 
