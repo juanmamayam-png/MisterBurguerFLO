@@ -345,16 +345,11 @@ let _clientPollTimer = null;
 
 async function loadPublicMenu() {
   try {
-    // Consultar estado del local directamente (sin cache)
-    const headers = {};
-    const res = await fetch('/api/days/current', { headers, cache: 'no-store' });
-    if (res.ok) {
-      const day = await res.json().catch(() => null);
-      State.currentDay = day;
-    } else {
-      State.currentDay = null;
-    }
-  } catch { /* sin conexión */ }
+    // Consultar estado del local directamente — sin auth, sin cache
+    const res = await fetch('/api/days/status', { cache: 'no-store' });
+    const s = res.ok ? await res.json().catch(() => ({})) : {};
+    State.currentDay = s.open ? s : null;
+  } catch { State.currentDay = null; }
 
   try {
     State.products = await API.getProducts({ status: 'active' });
@@ -367,19 +362,19 @@ async function loadPublicMenu() {
   renderClientMenu();
   updateLocalBadges();
 
-  // Polling para la página pública: verificar estado del local cada 30 segundos
-  if (!_clientPollTimer) {
-    _clientPollTimer = setInterval(async () => {
-      if (State.user) { clearInterval(_clientPollTimer); _clientPollTimer = null; return; }
-      try {
-        const prevOpen = !!State.currentDay;
-        const res = await fetch('/api/days/current', { cache: 'no-store' });
-        if (res.ok) { State.currentDay = await res.json().catch(() => null); }
-        else State.currentDay = null;
-        if (prevOpen !== !!State.currentDay) updateLocalBadges();
-      } catch { /* silencioso */ }
-    }, 30000);
-  }
+  // Polling para la página pública: verificar estado del local cada 20 segundos
+  // Limpiar timer anterior siempre para evitar duplicados
+  if (_clientPollTimer) { clearInterval(_clientPollTimer); _clientPollTimer = null; }
+  _clientPollTimer = setInterval(async () => {
+    if (State.user) { clearInterval(_clientPollTimer); _clientPollTimer = null; return; }
+    try {
+      const prevOpen = !!State.currentDay;
+      const res = await fetch('/api/days/status', { cache: 'no-store' });
+      const s = res.ok ? await res.json().catch(() => ({})) : {};
+      State.currentDay = s.open ? s : null;
+      if (prevOpen !== !!State.currentDay) updateLocalBadges();
+    } catch { /* sin conexión — silencioso */ }
+  }, 20000);
 }
 
 function filterMenu(cat, btn, search) {
@@ -1352,8 +1347,12 @@ async function renderReports(c) {
 function bootKitchen() {
   showApp('kitchen');
   State.knownOrders = [];
+  // Consultar estado del local antes de mostrar badges
+  fetch('/api/days/status', { cache:'no-store' })
+    .then(r => r.ok ? r.json() : {})
+    .then(s => { State.currentDay = s.open ? s : null; updateLocalBadges(); })
+    .catch(() => { State.currentDay = null; updateLocalBadges(); });
   renderKitchen();
-  updateLocalBadges();
   if (State.kitchTimer) clearInterval(State.kitchTimer);
   State.kitchTimer = setInterval(async () => {
     try {
@@ -1364,6 +1363,12 @@ function bootKitchen() {
       if (newIds.length) { if (_kitchSound) playKitchBeep(); toast(`¡${newIds.length} pedido(s) nuevo(s)!`,'warning'); }
       State.knownOrders = orders.map(o=>o.id);
       _renderKitchenOrders(orders);
+      // Actualizar estado del local cada ciclo (8s) — sin token necesario
+      const prevOpen = !!State.currentDay;
+      const dr = await fetch('/api/days/status', { cache:'no-store' }).catch(()=>null);
+      if (dr && dr.ok) { const s = await dr.json().catch(()=>({})); State.currentDay = s.open ? s : null; }
+      else if (!dr) State.currentDay = null;
+      if (prevOpen !== !!State.currentDay) updateLocalBadges();
     } catch {
       // Sin conexión: mostrar último estado conocido
       const cached = Cache.get('mb_kitch_orders', 60 * 60 * 1000);
