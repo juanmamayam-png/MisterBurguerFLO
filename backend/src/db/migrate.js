@@ -65,6 +65,24 @@ DO $$ BEGIN
       CHECK (table_type IN ('mesa','domicilio','para_llevar'));
   END IF;
 END $$;
+-- Paso 5: reemplazar constraint UNIQUE (number, floor) → (number, floor, table_type)
+-- Primero eliminar la constraint vieja si existe
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'tables_number_floor_key'
+  ) THEN
+    ALTER TABLE tables DROP CONSTRAINT tables_number_floor_key;
+  END IF;
+END $$;
+-- Luego crear la nueva constraint con table_type incluido
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'tables_number_floor_table_type_key'
+  ) THEN
+    ALTER TABLE tables ADD CONSTRAINT tables_number_floor_table_type_key
+      UNIQUE (number, floor, table_type);
+  END IF;
+END $$;
 
 -- ── JORNADAS (DÍAS DE TRABAJO) ──────────────────────
 CREATE TABLE IF NOT EXISTS work_days (
