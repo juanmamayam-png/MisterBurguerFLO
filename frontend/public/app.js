@@ -38,11 +38,32 @@ window.addEventListener('DOMContentLoaded', () => {
     logout();
   });
 
+  // Cuando se recupera la conexión, refrescar la pantalla activa
+  window.addEventListener('mb:refresh', async () => {
+    if (!State.user) return;
+    try {
+      State.tables = await API.getTables();
+      await loadCurrentDay();
+      updateLocalBadges();
+      // Refrescar la sección activa
+      const activeNav = document.querySelector('.st-nav__item.active');
+      if (activeNav) {
+        const id = activeNav.id?.replace('nav-','');
+        if (id && id !== 'local') staffSection(id);
+      }
+    } catch(e) {}
+  });
+
   // Intentar restaurar sesión con token guardado
   const token = TokenStore.get();
   if (token) {
     API.me().then(user => {
       State.user = user;
+      // Restaurar caché de productos y tablas inmediatamente
+      const cachedProducts = Cache.get(Cache.KEYS.products);
+      const cachedTables   = Cache.get(Cache.KEYS.tables);
+      if (cachedProducts) State.products = cachedProducts;
+      if (cachedTables)   State.tables   = cachedTables;
       bootUser();
     }).catch(() => {
       TokenStore.clear();
@@ -71,6 +92,11 @@ function bootUser() {
     updateStaffUser();
     loadCurrentDay().then(() => {
       updateLocalBadges();
+      // Restaurar productos desde cache si están disponibles (para offline inmediato)
+      if (!State.products.length) {
+        const cached = Cache.get(Cache.K.products);
+        if (cached) State.products = cached;
+      }
       if (State.user.role === 'boss') staffSection('dashboard');
       else                            staffSection('tables');
     });
@@ -117,8 +143,14 @@ function logout() {
    LOCAL STATE HELPERS
 ───────────────────────────────────────────── */
 async function loadCurrentDay() {
-  try { State.currentDay = await API.getCurrentDay(); }
-  catch { State.currentDay = null; }
+  try {
+    State.currentDay = await API.getCurrentDay();
+    Cache.set(Cache.KEYS.currentDay, State.currentDay);
+  } catch {
+    // Si no hay red, usar caché
+    const cached = Cache.get(Cache.KEYS.currentDay);
+    State.currentDay = cached !== undefined ? cached : null;
+  }
 }
 
 function updateLocalBadges() {
@@ -266,9 +298,15 @@ let _mFilter = 'all', _mSearch = '';
 async function loadPublicMenu() {
   try {
     State.products = await API.getProducts({ status: 'active' });
+    Cache.set(Cache.KEYS.products, State.products);
     renderClientMenu();
     updateLocalBadges();
-  } catch { renderClientMenu(); }
+  } catch {
+    // Si no hay red, cargar desde caché
+    const cached = Cache.get(Cache.KEYS.products);
+    if (cached) State.products = cached;
+    renderClientMenu();
+  }
 }
 
 function filterMenu(cat, btn, search) {
@@ -367,7 +405,12 @@ async function renderTables(c) {
   c.innerHTML = `<div class="ph-row"><div class="ph"><h2>${State.user.role==='boss'?'Todas las Mesas':'Mis Mesas'}</h2><p>Cargando…</p></div></div>`;
   try {
     State.tables = await API.getTables();
-    State.products = State.products.length ? State.products : await API.getProducts({ status:'active' });
+    if (!State.products.length) {
+      State.products = await API.getProducts({ status:'active' });
+    }
+    // Guardar en caché local para sobrevivir apagones
+    Cache.set(Cache.KEYS.tables, State.tables);
+    Cache.set(Cache.KEYS.products, State.products);
   } catch (err) { toast('Error cargando mesas','error'); return; }
 
   const isBoss   = State.user.role === 'boss';
@@ -561,12 +604,17 @@ async function refreshOrderPanel() {
   const t = State.tables.find(x => x.id === State.selectedTable); if (!t) return;
   if (State.activeOrder) {
     try {
-      State.activeOrder = await API.getOrder(State.activeOrder.id);
-      const ci = $('cart-items'), cf = document.querySelector('.cart-foot');
-      const tbl = State.tables.find(x => x.id === State.selectedTable);
-      if (ci) ci.innerHTML = renderCartItems(State.activeOrder.items, State.activeOrder.status === 'pending');
-      if (cf) cf.innerHTML = renderCartFoot(State.activeOrder.items, State.activeOrder, tbl?.table_type);
-    } catch {}
+      const order = await API.getOrder(State.activeOrder.id);
+      State.activeOrder = order;
+      // Guardar en cache local por si hay apagón
+      if (order && order.id) Cache.setOrder(order.id, order);
+    } catch {
+      // Si falla, usar lo que tenemos en memoria (puede estar en cache ya)
+    }
+    const ci = $('cart-items'), cf = document.querySelector('.cart-foot');
+    const tbl = State.tables.find(x => x.id === State.selectedTable);
+    if (ci) ci.innerHTML = renderCartItems(State.activeOrder.items, State.activeOrder.status === 'pending');
+    if (cf) cf.innerHTML = renderCartFoot(State.activeOrder.items, State.activeOrder, tbl?.table_type);
   }
 }
 
@@ -1225,14 +1273,30 @@ function bootKitchen() {
   State.kitchTimer = setInterval(async () => {
     try {
       const orders = await API.getKitchenOrders();
+      if (!Array.isArray(orders)) return;
+      Cache.set('mb_kitch_orders', orders);
       const newIds = orders.map(o=>o.id).filter(id => !State.knownOrders.includes(id));
       if (newIds.length) { if (_kitchSound) playKitchBeep(); toast(`¡${newIds.length} pedido(s) nuevo(s)!`,'warning'); }
       State.knownOrders = orders.map(o=>o.id);
       _renderKitchenOrders(orders);
-    } catch {}
+    } catch {
+      // Sin conexión: mostrar último estado conocido
+      const cached = Cache.get('mb_kitch_orders', 60 * 60 * 1000);
+      if (cached) _renderKitchenOrders(cached);
+    }
   }, 8000);
   // Initial load
-  API.getKitchenOrders().then(orders => { State.knownOrders = orders.map(o=>o.id); _renderKitchenOrders(orders); }).catch(()=>{});
+  API.getKitchenOrders()
+    .then(orders => {
+      if (!Array.isArray(orders)) return;
+      Cache.set('mb_kitch_orders', orders);
+      State.knownOrders = orders.map(o=>o.id);
+      _renderKitchenOrders(orders);
+    })
+    .catch(() => {
+      const cached = Cache.get('mb_kitch_orders', 60 * 60 * 1000);
+      if (cached) { State.knownOrders = cached.map(o=>o.id); _renderKitchenOrders(cached); }
+    });
 }
 function kitchTab(tab, btn) {
   State.kitchTab = tab;
