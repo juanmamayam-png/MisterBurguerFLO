@@ -440,10 +440,27 @@ async function pickTable(tid, restore = false) {
       State.activeOrder = order;
       osp.innerHTML = renderOrderPanelHTML(t, order, isBoss);
       if (order.status !== 'pending') renderOrderProds();
-    } catch { osp.innerHTML = renderOrderPanelHTML(t, null, isBoss); }
+    } catch (e) {
+      // Si no se puede cargar el pedido, mostrar estado limpio
+      State.activeOrder = null;
+      osp.innerHTML = renderOrderPanelHTML(t, null, isBoss);
+      if (isBoss) toast('No se pudo cargar el pedido de esta mesa','warning');
+    }
   } else {
     State.activeOrder = null;
-    osp.innerHTML = renderOrderPanelHTML(t, null, isBoss);
+    // Edge case: table shows occupied/pending but no order found
+    // Give boss a way to force-free the table
+    if (isBoss && t.status !== 'free') {
+      osp.innerHTML = renderOrderPanelHTML(t, null, isBoss) +
+        `<div style="margin-top:10px;padding:12px;background:rgba(232,67,26,.08);border:1px solid rgba(232,67,26,.25);border-radius:10px;text-align:center">
+          <p style="font-size:12px;color:var(--text-m);margin-bottom:8px">⚠ La mesa aparece ocupada sin pedido activo</p>
+          <button class="pill-btn pill-btn--danger pill-btn--sm" onclick="forceFreeTabe(${t.id})">
+            <i class="fa-solid fa-unlock"></i> Forzar liberación
+          </button>
+        </div>`;
+    } else {
+      osp.innerHTML = renderOrderPanelHTML(t, null, isBoss);
+    }
   }
 }
 
@@ -466,6 +483,7 @@ function renderOrderPanelHTML(table, order, isBoss) {
         ${isBoss&&order ? `<button class="pill-btn pill-btn--sm" style="background:var(--blue);border-color:var(--blue);color:#fff" onclick="openMoveModal()"><i class="fa-solid fa-arrows-alt"></i></button>` : ''}
         ${order&&!isPending ? `<button class="pill-btn pill-btn--danger pill-btn--sm" onclick="doRequestPay(${order.id})"><i class="fa-solid fa-money-bill-wave"></i> Cobrar</button>` : ''}
         ${isBoss&&isPending ? `<button class="pill-btn pill-btn--green pill-btn--sm" onclick="openPayModal(${order.id})"><i class="fa-solid fa-circle-check"></i> Pagar</button>` : ''}
+        ${isBoss&&order ? `<button class="pill-btn pill-btn--sm pill-btn--danger" style="opacity:.7" onclick="cancelOrderAndFree(${order.id},${table.id})" title="Cancelar pedido y liberar mesa"><i class="fa-solid fa-ban"></i> Liberar</button>` : ''}
       </div>
     </div>
     ${order && !isPending ? `
@@ -579,18 +597,49 @@ async function createOrder(tableId) {
     State.activeOrder = { ...order, items: [] };
     State.tables = await API.getTables();
     toast('Pedido creado ✅','success');
-    // Refresh panel
     const t = State.tables.find(x => x.id === tableId);
     const osp = $('order-side-panel'); if (osp && t) { osp.innerHTML = renderOrderPanelHTML(t, State.activeOrder, State.user.role==='boss'); renderOrderProds(); }
   } catch (err) { toast(err.message,'error'); }
 }
 
+// Forzar liberación de mesa — SOLO JEFE (estado inconsistente)
+async function forceFreeTabe(tableId) {
+  if (!confirm('¿Forzar la liberación de esta mesa?\nUsa esto solo si la mesa quedó bloqueada por error.')) return;
+  try {
+    await API.setTableStatus(tableId, 'free');
+    State.tables = await API.getTables();
+    State.selectedTable = null; State.activeOrder = null;
+    toast('Mesa liberada forzosamente ✅','success');
+    staffSection('tables');
+  } catch (err) { toast(err.message || 'Error al liberar mesa','error'); }
+}
+
+// Cancelar pedido activo y liberar la mesa — SOLO JEFE
+async function cancelOrderAndFree(orderId, tableId) {
+  if (!confirm('¿Cancelar este pedido y liberar la mesa?\n\nEsta acción no se puede deshacer.')) return;
+  try {
+    await API.cancelOrder(orderId);
+    State.tables = await API.getTables();
+    State.selectedTable = null;
+    State.activeOrder   = null;
+    toast('Mesa liberada correctamente ✅','success');
+    staffSection('tables');
+  } catch (err) { toast(err.message || 'Error al liberar mesa','error'); }
+}
+
 async function doRequestPay(orderId) {
+  // Verificar en el frontend que haya ítems antes de llamar al API
+  const order = State.activeOrder;
+  const activeItems = order?.items?.filter(i => i.status === 'active') || [];
+  if (activeItems.length === 0) {
+    toast('No puedes solicitar cobro de un pedido vacío. Agrega productos primero.','error');
+    return;
+  }
   if (!confirm('¿Marcar como listo para cobrar?')) return;
   try {
     await API.requestPayment(orderId);
-    State.tables = await API.getTables();
     State.selectedTable = null; State.activeOrder = null;
+    State.tables = await API.getTables();
     toast('Pedido enviado a cobro 💛','info');
     staffSection('tables');
   } catch (err) { toast(err.message,'error'); }
@@ -698,11 +747,14 @@ async function confirmPay() {
   const method  = $('pay-meth').value;
   try {
     await API.confirmPayment(orderId, method);
-    State.tables = await API.getTables();
+    // Reset state before refreshing
     State.selectedTable = null; State.activeOrder = null;
     closeModal('modal-pay');
+    // Refresh everything
+    State.tables = await API.getTables();
+    await loadCurrentDay();
+    updateLocalBadges();
     toast('✅ Pago confirmado — Mesa liberada','success');
-    await loadCurrentDay(); updateLocalBadges();
     staffSection('tables');
   } catch (err) { toast(err.message,'error'); }
 }
