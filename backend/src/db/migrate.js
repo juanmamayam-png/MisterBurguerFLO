@@ -13,14 +13,18 @@ const SQL = `
 
 -- ── USUARIOS ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  id          SERIAL PRIMARY KEY,
-  username    VARCHAR(60)  UNIQUE NOT NULL,
-  password    VARCHAR(200) NOT NULL,   -- bcrypt hash
-  role        VARCHAR(20)  NOT NULL CHECK (role IN ('boss','waiter','kitchen')),
-  name        VARCHAR(100) NOT NULL,
-  active      BOOLEAN      NOT NULL DEFAULT true,
-  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  id            SERIAL PRIMARY KEY,
+  username      VARCHAR(60)  UNIQUE NOT NULL,
+  password      VARCHAR(200) NOT NULL,
+  role          VARCHAR(20)  NOT NULL CHECK (role IN ('boss','waiter','kitchen')),
+  name          VARCHAR(100) NOT NULL,
+  active        BOOLEAN      NOT NULL DEFAULT true,
+  session_token VARCHAR(100) DEFAULT NULL,  -- token único de sesión activa
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+-- Migración segura: agregar session_token si no existe
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token VARCHAR(100) DEFAULT NULL;
 
 -- ── PRODUCTOS ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS products (
@@ -181,9 +185,9 @@ async function migrate() {
   try {
     console.log('[Migrate] Ejecutando migraciones…');
     await client.query(SQL);
-    console.log('[Migrate] Tablas creadas/actualizadas correctamente');
+    console.log('[Migrate] ✅ Tablas creadas/actualizadas correctamente');
   } catch (err) {
-    console.error('[Migrate] Error:', err.message);
+    console.error('[Migrate] ❌ Error:', err.message);
     process.exit(1);
   } finally {
     client.release();
