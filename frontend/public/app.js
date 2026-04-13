@@ -1469,3 +1469,68 @@ function _renderKitchenOrders(orders) {
   // Mostrar todo: comida arriba, bebidas abajo dentro de cada tarjeta
   container.innerHTML = `<div class="kitch-grid">${visible.map(o => renderKoCard(o, true, true)).join('')}</div>`;
 }
+/* ─────────────────────────────────────────────
+   MODALES — abrir / cerrar
+───────────────────────────────────────────── */
+function openModal(id) {
+  const el = $(id);
+  if (el) el.classList.remove('hidden');
+}
+function closeModal(id) {
+  const el = $(id);
+  if (el) el.classList.add('hidden');
+}
+// Cerrar modal al hacer click en el fondo oscuro
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-wrap')) {
+    e.target.classList.add('hidden');
+  }
+});
+
+/* ─────────────────────────────────────────────
+   LAYOUT CSS inline
+───────────────────────────────────────────── */
+(function injectCSS() {
+  const s = document.createElement('style');
+  s.textContent = `
+    .tables-order-layout{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+    .tables-panel{min-width:0}
+    .order-side-panel{background:var(--bg-1);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;position:sticky;top:calc(var(--bar-h)+12px);max-height:calc(100vh - var(--bar-h) - 24px);overflow-y:auto}
+    .order-side-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;gap:10px;color:var(--text-dim);text-align:center}
+    .order-side-empty i{font-size:36px}
+    .order-side-empty p{font-size:12px;font-weight:600;line-height:1.5}
+    .order-side-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
+    .order-side-header h3{font-size:18px}
+    .orders-section{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
+    @media(max-width:900px){.tables-order-layout{grid-template-columns:1fr}.order-side-panel{position:static;max-height:none}}
+  `;
+  document.head.appendChild(s);
+})();
+
+/* ─────────────────────────────────────────────
+   SONIDO COCINA
+───────────────────────────────────────────── */
+let _kitchSound = true;
+function toggleKitchSound() {
+  _kitchSound = !_kitchSound;
+  const btn = $('kitch-sound-btn');
+  if (btn) btn.innerHTML = _kitchSound
+    ? '<i class="fa-solid fa-bell"></i>'
+    : '<i class="fa-solid fa-bell-slash"></i>';
+  toast(_kitchSound ? 'Sonido activado' : 'Sonido desactivado', 'info');
+}
+function playKitchBeep() {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.4, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.4);
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + 0.4);
+  } catch {}
+}
