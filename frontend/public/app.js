@@ -6,6 +6,9 @@
 'use strict';
 
 const CAT_EMOJI = { Hamburguesas:'🍔', Especiales:'🥩', 'Hot Dog':'🌭', Bebidas:'🥤', Infantil:'🍟', Entradas:'🥗' };
+const BURGER_CATS_BREAD = ['Hamburguesas','Especiales','Hot Dog']; // categorías con opción pan/plátano
+const TABLE_TYPE_LABELS = { mesa:'Mesa', domicilio:'Domicilio', para_llevar:'Para llevar' };
+const TABLE_TYPE_ICONS  = { mesa:'🪑', domicilio:'🛵', para_llevar:'🥡' };
 const $ = id => document.getElementById(id);
 
 /* ─────────────────────────────────────────────
@@ -318,15 +321,39 @@ function staffSection(sec) {
 /* ─────────────────────────────────────────────
    FLOOR TABS
 ───────────────────────────────────────────── */
-function floorTabsHTML(ctx) {
-  const c1 = State.tables.filter(t=>t.floor===1&&t.status!=='free').length;
-  const c2 = State.tables.filter(t=>t.floor===2&&t.status!=='free').length;
-  return `<div class="floor-tabs">
-    <button class="ft ${State.floor===1?'active':''}" onclick="switchFloor(1,'${ctx}')"><i class="fa-solid fa-1"></i>Piso 1 <span class="fc">${c1}/14</span></button>
-    <button class="ft ${State.floor===2?'active':''}" onclick="switchFloor(2,'${ctx}')"><i class="fa-solid fa-2"></i>Piso 2 <span class="fc">${c2}/23</span></button>
-  </div>`;
+function tableTypeTabs(ctx) {
+  const c = {
+    mesa:       State.tables.filter(t=>t.table_type==='mesa'&&t.status!=='free').length,
+    domicilio:  State.tables.filter(t=>t.table_type==='domicilio'&&t.status!=='free').length,
+    para_llevar:State.tables.filter(t=>t.table_type==='para_llevar'&&t.status!=='free').length,
+  };
+  const total = {
+    mesa: State.tables.filter(t=>t.table_type==='mesa').length,
+    domicilio: 100, para_llevar: 100,
+  };
+  return `<div class="floor-tabs" style="flex-wrap:wrap">
+    <button class="ft ${State.tableType==='mesa'?'active':''}" onclick="switchTableType('mesa','${ctx}')">
+      🪑 Mesas <span class="fc">${c.mesa}/${total.mesa}</span>
+    </button>
+    <button class="ft ${State.tableType==='domicilio'?'active':''}" onclick="switchTableType('domicilio','${ctx}')">
+      🛵 Domicilios <span class="fc">${c.domicilio}/100</span>
+    </button>
+    <button class="ft ${State.tableType==='para_llevar'?'active':''}" onclick="switchTableType('para_llevar','${ctx}')">
+      🥡 Para llevar <span class="fc">${c.para_llevar}/100</span>
+    </button>
+  </div>
+  ${State.tableType==='mesa' ? `<div class="floor-tabs" style="margin-top:6px">
+    <button class="ft ${State.floor===1?'active':''}" onclick="switchFloor(1,'${ctx}')"><i class="fa-solid fa-1"></i>Piso 1</button>
+    <button class="ft ${State.floor===2?'active':''}" onclick="switchFloor(2,'${ctx}')"><i class="fa-solid fa-2"></i>Piso 2</button>
+  </div>` : ''}`;
 }
-function switchFloor(f, ctx) { State.floor = f; staffSection(ctx === 'boss' ? 'tables' : ctx); }
+function floorTabsHTML(ctx) { return tableTypeTabs(ctx); } // alias for dashboard
+function switchFloor(f, ctx) { State.floor = f; staffSection(ctx==='boss'?'tables':ctx); }
+function switchTableType(type, ctx) {
+  State.tableType = type;
+  State.selectedTable = null; State.activeOrder = null;
+  staffSection(ctx==='boss'?'tables':ctx);
+}
 
 /* ─────────────────────────────────────────────
    TABLES SECTION
@@ -340,7 +367,12 @@ async function renderTables(c) {
 
   const isBoss   = State.user.role === 'boss';
   const myTids   = State.tables.filter(t => t.order_waiter_id === State.user.id && t.order_id).map(t=>t.id);
-  const flTables = State.tables.filter(t => t.floor === State.floor);
+  // Filter by table type; for mesas also filter by floor
+  const flTables = State.tables.filter(t => {
+    if (t.table_type !== State.tableType) return false;
+    if (State.tableType === 'mesa') return t.floor === State.floor;
+    return true;
+  });
 
   c.innerHTML = `
     <div class="ph-row">
@@ -348,15 +380,15 @@ async function renderTables(c) {
     </div>
     <div class="tables-order-layout">
       <div class="tables-panel">
-        ${floorTabsHTML('tables')}
-        <div class="floor-label"><h3><i class="fa-solid fa-building"></i> Piso ${State.floor}</h3></div>
+        ${tableTypeTabs('tables')}
+        <div class="floor-label"><h3>${TABLE_TYPE_ICONS[State.tableType]||'🪑'} ${State.tableType==='mesa'?`Piso ${State.floor}`:TABLE_TYPE_LABELS[State.tableType]||State.tableType}</h3></div>
         <div class="tables-grid" id="tables-grid">
           ${flTables.map(t => {
             const mine = myTids.includes(t.id);
             const st   = {free:'Libre',occupied:mine&&!isBoss?'Mi pedido':'Ocupada',pending:'Cobro pend.'}[t.status]||t.status;
-            return `<div class="table-card ${t.status} ${State.selectedTable===t.id?'selected':''}" onclick="pickTable(${t.id})">
+            return `<div class="table-card ${t.status} ${State.selectedTable===t.id?'selected':''}" data-tid="${t.id}" onclick="pickTable(${t.id})">
               <div class="tc-icon">${{free:'🟢',occupied:'🍽️',pending:'💛'}[t.status]||'⚪'}</div>
-              <div class="tc-num">${t.number}</div>
+              <div class="tc-num" style="font-size:${t.table_type!=='mesa'?'14px':'24px'};line-height:1.2">${t.table_type==='mesa'?t.number:(TABLE_TYPE_LABELS[t.table_type]||t.table_type)+' '+t.number}</div>
               <div class="tc-status">${st}</div>
               ${t.order_total > 0 ? `<div class="tc-total">${fmtCOP(t.order_total)}</div>` : ''}
             </div>`;
@@ -390,9 +422,7 @@ async function pickTable(tid, restore = false) {
     State.selectedTable = tid;
     document.querySelectorAll('.table-card').forEach(el => el.classList.remove('selected'));
     document.querySelectorAll('.table-card').forEach(el => {
-      const num = parseInt(el.querySelector('.tc-num')?.textContent);
-      const ft = State.tables.find(x => x.number === num && x.floor === State.floor);
-      if (ft && ft.id === tid) el.classList.add('selected');
+      if (el.dataset.tid && parseInt(el.dataset.tid) === tid) el.classList.add('selected');
     });
   }
 
@@ -420,7 +450,7 @@ function renderOrderPanelHTML(table, order, isBoss) {
   return `
     <div class="order-side-header">
       <div>
-        <h3>Mesa ${table.number} <span style="font-size:14px;color:var(--text-m)">Piso ${table.floor}</span></h3>
+        <h3>${table.table_type==='mesa'?`Mesa ${table.number}`:(TABLE_TYPE_LABELS[table.table_type]||table.table_type)+' '+table.number} <span style="font-size:13px;color:var(--text-m)">${table.table_type==='mesa'?`Piso ${table.floor}`:''}</span></h3>
         <p style="font-size:12px;color:var(--text-m);margin-top:2px">
           ${order ? `Pedido #${order.id}` : 'Sin pedido activo'}
           ${isPending ? `<span class="badge badge-yellow" style="margin-left:6px"><i class="fa-solid fa-lock"></i> Cobro pendiente</span>` : ''}
@@ -476,7 +506,7 @@ function renderCartItems(items = [], locked = false) {
     return `<div class="ci ${c?'cancelled':''}" id="ci-${it.id}">
       ${it.image ? `<img src="${it.image}" style="width:26px;height:26px;border-radius:5px;object-fit:cover;flex-shrink:0">` : `<span class="ci-em">${it.emoji||'🍔'}</span>`}
       <div class="ci-info">
-        <div class="ci-name">${it.product_name||'Producto'} ${it.quantity>1?`×${it.quantity}`:''}</div>
+        <div class="ci-name">${it.product_name||'Producto'} ${it.quantity>1?`×${it.quantity}`:''}${it.bread_type?` <span style="font-size:10px;color:var(--acc);font-weight:700">${it.bread_type==='platano'?'🍌 Plátano':'🍞 Pan'}</span>`:''}</div>
         <div class="ci-price">${fmtCOP(it.unit_price * it.quantity)}</div>
         ${it.notes ? `<div class="ci-note">${it.notes}</div>` : ''}
         ${c ? '<span class="ci-cbadge">Cancelado</span>' : ''}
@@ -572,17 +602,50 @@ function openAdd(pid) {
   $('ma-qty').textContent   = '1';
   $('ma-notes').value       = '';
   $('ma-pid').value         = pid;
+  // Mostrar selector de pan/plátano si aplica
+  const breadSect = $('ma-bread-section');
+  if (breadSect) {
+    const showBread = BURGER_CATS_BREAD.includes(p.category);
+    breadSect.style.display = showBread ? 'block' : 'none';
+    // Reset selection
+    document.querySelectorAll('.bread-btn').forEach(b => b.classList.remove('active'));
+    const defaultBtn = document.querySelector('.bread-btn[data-val="pan"]');
+    if (defaultBtn && showBread) defaultBtn.classList.add('active');
+    $('ma-bread').value = showBread ? 'pan' : '';
+    // Update price display
+    updateBreadPrice(p.price, showBread ? 'pan' : null);
+  }
   openModal('modal-add');
+}
+
+function selectBread(val, btn) {
+  document.querySelectorAll('.bread-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  $('ma-bread').value = val;
+  const pid = parseInt($('ma-pid').value);
+  const p = State.products.find(x => x.id === pid);
+  if (p) updateBreadPrice(p.price, val);
+}
+
+function updateBreadPrice(basePrice, breadVal) {
+  const extra = breadVal === 'platano' ? 1000 : 0;
+  const priceEl = $('ma-price');
+  if (priceEl) {
+    priceEl.innerHTML = fmtCOP(basePrice + extra) +
+      (extra > 0 ? ' <span style="font-size:13px;color:var(--green)">+$1.000 plátano</span>' : '');
+  }
 }
 function changeQty(d) { _addQty = Math.max(1, _addQty + d); $('ma-qty').textContent = _addQty; }
 async function confirmAdd() {
-  const pid   = parseInt($('ma-pid').value);
-  const notes = $('ma-notes').value.trim();
+  const pid        = parseInt($('ma-pid').value);
+  const notes      = $('ma-notes').value.trim();
+  const bread_type = $('ma-bread')?.value || null;
   try {
-    await API.addItem(State.activeOrder.id, { product_id: pid, quantity: _addQty, notes });
+    await API.addItem(State.activeOrder.id, { product_id: pid, quantity: _addQty, notes, bread_type: bread_type || undefined });
     closeModal('modal-add');
     const p = State.products.find(x=>x.id===pid);
-    toast(`${p?.emoji||''} ${p?.name||'Producto'} agregado`,'success');
+    const breadLabel = bread_type === 'platano' ? ' 🍌 plátano' : bread_type === 'pan' ? ' 🍞 pan' : '';
+    toast(`${p?.emoji||''} ${p?.name||'Producto'}${breadLabel} agregado`,'success');
     await refreshOrderPanel();
   } catch (err) { toast(err.message,'error'); }
 }
@@ -603,8 +666,8 @@ async function openPayModal(orderId) {
     const order = await API.getOrder(orderId);
     const total = orderTotal(order.items);
     $('pay-sum').innerHTML = `
-      <div class="pt-title">Mesa ${order.table_number} · Piso ${order.table_floor} · Pedido #${orderId}</div>
-      ${order.items.map(i => `<div class="pi ${i.status==='cancelled'?'cancelled':''}"><span>${i.emoji||''} ${i.product_name} ×${i.quantity}</span><span>${fmtCOP(i.unit_price*i.quantity)}</span></div>`).join('')}
+      <div class="pt-title">${order.table_type==='mesa'?`Mesa ${order.table_number} · Piso ${order.table_floor}`:order.table_type==='domicilio'?`Domicilio ${order.table_number}`:`Para llevar ${order.table_number}`} · Pedido #${orderId}</div>
+      ${order.items.map(i => `<div class="pi ${i.status==='cancelled'?'cancelled':''}"><span>${i.emoji||''} ${i.product_name}${i.bread_type?` (${i.bread_type==='platano'?'🍌 plátano':'🍞 pan'})`:''} ×${i.quantity}</span><span>${fmtCOP(i.unit_price*i.quantity)}</span></div>`).join('')}
       <div class="ptotal"><span>TOTAL</span><span>${fmtCOP(total)}</span></div>`;
     $('pay-recv').value = ''; $('pay-change').classList.add('hidden');
     $('pay-meth').value = 'efectivo'; $('pay-oid').value = orderId;
@@ -766,7 +829,7 @@ async function renderDashboard(c) {
                <div class="stat-card"><div class="sc-label">Ganancia Neta</div><div class="sc-val" style="font-size:22px;color:${(d.net_profit||0)>=0?'var(--green)':'var(--red)'}">${fmtCOP(d.net_profit||0)}</div></div>` : ''}
       </div>
       ${pendOrders.length ? `<div class="pend-box"><h4><i class="fa-solid fa-triangle-exclamation"></i> Mesas esperando cobro</h4><div class="pend-btns">
-        ${pendOrders.map(o=>`<button class="pend-btn" onclick="openPayModal(${o.id})"><i class="fa-solid fa-money-bill-wave"></i> Mesa ${o.table_number} P${o.table_floor} · ${fmtCOP(o.total)}</button>`).join('')}
+        ${pendOrders.map(o=>`<button class="pend-btn" onclick="openPayModal(${o.id})"><i class="fa-solid fa-money-bill-wave"></i> ${o.table_type==='mesa'?`Mesa ${o.table_number} P${o.table_floor}`:o.table_type==='domicilio'?`Domicilio ${o.table_number}`:`Para llevar ${o.table_number}`} · ${fmtCOP(o.total)}</button>`).join('')}
       </div></div>` : ''}
       <div class="ph-row" style="margin-top:8px"><h2 style="font-size:28px">Mesas en vivo</h2></div>
       ${floorTabsHTML('boss')}
@@ -775,7 +838,7 @@ async function renderDashboard(c) {
         ${tables.filter(t=>t.floor===State.floor).map(t=>`
           <div class="table-card ${t.status}" onclick="pickTableDash(${t.id})">
             <div class="tc-icon">${{free:'🟢',occupied:'🍽️',pending:'💛'}[t.status]||'⚪'}</div>
-            <div class="tc-num">${t.number}</div>
+            <div class="tc-num" style="font-size:${t.table_type!=='mesa'?'12px':'24px'};line-height:1.2">${t.table_type==='mesa'?t.number:(TABLE_TYPE_LABELS[t.table_type]||t.table_type)+' '+t.number}</div>
             <div class="tc-status">${{free:'Libre',occupied:'Ocupada',pending:'Cobro pend.'}[t.status]||t.status}</div>
             ${t.order_total>0?`<div class="tc-total">${fmtCOP(t.order_total)}</div>`:''}
           </div>`).join('')}
@@ -797,7 +860,7 @@ async function renderAllOrders(c) {
     ]);
     const card = o => `<div class="oc">
       <div class="oc-head">
-        <h4>Pedido #${o.id} · Mesa ${o.table_number} P${o.table_floor}</h4>
+        <h4>Pedido #${o.id} · ${o.table_type==='mesa'?`Mesa ${o.table_number} P${o.table_floor}`:o.table_type==='domicilio'?`Domicilio ${o.table_number}`:`Para llevar ${o.table_number}`}</h4>
         <div style="display:flex;gap:8px;align-items:center">
           <span class="badge ${{active:'badge-green',pending:'badge-yellow',paid:'badge-acc'}[o.status]||'badge-acc'}">${{active:'Activo',pending:'Pago Pend.',paid:'Cobrado'}[o.status]||o.status}</span>
           <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--acc)">${fmtCOP(o.total)}</span>
@@ -1083,39 +1146,67 @@ function kitchTab(tab, btn) {
   if (btn) btn.classList.add('active');
   API.getKitchenOrders().then(orders => _renderKitchenOrders(orders)).catch(()=>{});
 }
+function kitchTypeFilter(type, btn) {
+  State.kitchTableType = type || null; // null = all types
+  document.querySelectorAll('.kitch-type-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  API.getKitchenOrders().then(orders => _renderKitchenOrders(orders)).catch(()=>{});
+}
 async function renderKitchen() {
   try { const orders = await API.getKitchenOrders(); _renderKitchenOrders(orders); } catch {}
 }
 function _renderKitchenOrders(orders) {
-  const visible = orders.filter(o => {
+  // Filter by table type if selected
+  const typeFiltered = State.kitchTableType
+    ? orders.filter(o => o.table_type === State.kitchTableType)
+    : orders;
+
+  const visible = typeFiltered.filter(o => {
     const items = o.items?.filter(i=>i.status==='active')||[];
     return State.kitchTab==='food'
       ? items.some(i => !isBev(i.category))
       : items.some(i => isBev(i.category));
   });
+
   const fc = orders.filter(o=>(o.items||[]).filter(i=>i.status==='active').some(i=>!isBev(i.category))).length;
   const dc = orders.filter(o=>(o.items||[]).filter(i=>i.status==='active').some(i=>isBev(i.category))).length;
-  const kc1=$('kc-food'); if(kc1) kc1.textContent=fc;
-  const kc2=$('kc-drinks'); if(kc2) kc2.textContent=dc;
+  const kc1=$('kc-food');    if(kc1)kc1.textContent=fc;
+  const kc2=$('kc-drinks');  if(kc2)kc2.textContent=dc;
+
+  // Update type counts
+  const tm=$('kc-mesa'); const td=$('kc-dom'); const tpl=$('kc-llevar');
+  if(tm) tm.textContent=orders.filter(o=>o.table_type==='mesa').length;
+  if(td) td.textContent=orders.filter(o=>o.table_type==='domicilio').length;
+  if(tpl) tpl.textContent=orders.filter(o=>o.table_type==='para_llevar').length;
+
   const container = $('kitch-content'); if (!container) return;
   if (!visible.length) {
-    container.innerHTML = `<div class="kitch-empty"><i class="fa-solid fa-check-circle"></i><h3>Sin pedidos</h3><p>${State.kitchTab==='food'?'No hay platos pendientes':'No hay bebidas pendientes'}</p></div>`;
+    container.innerHTML = `<div class="kitch-empty"><i class="fa-solid fa-check-circle"></i><h3>Sin pedidos</h3><p>No hay pedidos pendientes</p></div>`;
     return;
   }
   container.innerHTML = `<div class="kitch-grid">${visible.map(o => {
+    const ttype = o.table_type || 'mesa';
+    const tLabel = ttype==='mesa'?`Mesa ${o.table_number} · Piso ${o.table_floor}`
+                  :ttype==='domicilio'?`Domicilio ${o.table_number}`
+                  :`Para llevar ${o.table_number}`;
+    const tIcon  = {mesa:'🪑',domicilio:'🛵',para_llevar:'🥡'}[ttype]||'🪑';
     const items = (o.items||[]).filter(i=>i.status==='active').filter(i=>State.kitchTab==='food'?!isBev(i.category):isBev(i.category));
     if (!items.length) return '';
     const mins = elapsed(o.created_at); const isNew = mins < 2;
-    return `<div class="ko${isNew?' new-order':''}">
+    return `<div class="ko${isNew?' new-order':''} ko-type-${ttype}">
       <div class="ko-head">
-        <div><h4>Mesa ${o.table_number} <span style="font-size:14px;color:rgba(62,184,122,.5)">Piso ${o.table_floor}</span></h4>
+        <div>
+          <h4>${tIcon} ${tLabel}</h4>
           <div class="ko-meta">Pedido #${o.id} · ${fmtTime(o.created_at)}${o.status==='pending'?' · <span style="color:var(--yellow)">Listo para cobrar</span>':''}</div>
         </div>
         <div class="ko-timer ${timerClass(o.created_at)}">${elapsedStr(o.created_at)}</div>
       </div>
       <div class="ko-items">${items.map(it => `<div class="ko-item">
         ${it.image?`<img src="${it.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0">`:`<span class="ki-em">${it.emoji||'🍔'}</span>`}
-        <div class="ki-info"><div class="ki-name">${it.product_name||'?'}</div>${it.notes?`<div class="ki-notes">${it.notes}</div>`:''}</div>
+        <div class="ki-info">
+          <div class="ki-name">${it.product_name||'?'} ${it.bread_type?`<span class="ki-bread">${it.bread_type==='platano'?'🍌 Plátano':'🍞 Pan'}</span>`:''}</div>
+          ${it.notes?`<div class="ki-notes">${it.notes}</div>`:''}
+        </div>
         <div class="ki-qty">×${it.quantity}</div>
       </div>`).join('')}</div>
     </div>`;
