@@ -28,20 +28,38 @@ async function seed() {
     }
   }
 
-  // ── Mesas (14 en Piso 1, 23 en Piso 2) ─────────────
+  // ── Mesas físicas (14 en Piso 1, 23 en Piso 2) ─────────
   for (let n = 1; n <= 14; n++) {
-    const ex = await query('SELECT id FROM tables WHERE number=$1 AND floor=1', [n]);
+    const ex = await query('SELECT id FROM tables WHERE number=$1 AND floor=1 AND table_type=$2', [n,'mesa']);
     if (ex.rows.length === 0) {
-      await query('INSERT INTO tables (number, floor, status) VALUES ($1,1,\'free\')', [n]);
+      await query("INSERT INTO tables (number, floor, table_type, status) VALUES ($1,1,'mesa','free')", [n]);
     }
   }
   for (let n = 1; n <= 23; n++) {
-    const ex = await query('SELECT id FROM tables WHERE number=$1 AND floor=2', [n]);
+    const ex = await query('SELECT id FROM tables WHERE number=$1 AND floor=2 AND table_type=$2', [n,'mesa']);
     if (ex.rows.length === 0) {
-      await query('INSERT INTO tables (number, floor, status) VALUES ($1,2,\'free\')', [n]);
+      await query("INSERT INTO tables (number, floor, table_type, status) VALUES ($1,2,'mesa','free')", [n]);
     }
   }
-  console.log('  [Tables] ✅ 37 mesas (Piso 1: 14, Piso 2: 23)');
+  console.log('  [Tables] ✅ 37 mesas físicas (Piso 1: 14, Piso 2: 23)');
+
+  // ── Domicilios (100) ──────────────────────────────────
+  for (let n = 1; n <= 100; n++) {
+    const ex = await query('SELECT id FROM tables WHERE number=$1 AND table_type=$2', [n,'domicilio']);
+    if (ex.rows.length === 0) {
+      await query("INSERT INTO tables (number, floor, table_type, status) VALUES ($1,0,'domicilio','free')", [n]);
+    }
+  }
+  console.log('  [Tables] ✅ 100 domicilios');
+
+  // ── Para llevar (100) ─────────────────────────────────
+  for (let n = 1; n <= 100; n++) {
+    const ex = await query('SELECT id FROM tables WHERE number=$1 AND table_type=$2', [n,'para_llevar']);
+    if (ex.rows.length === 0) {
+      await query("INSERT INTO tables (number, floor, table_type, status) VALUES ($1,0,'para_llevar','free')", [n]);
+    }
+  }
+  console.log('  [Tables] ✅ 100 para llevar');
 
   // ── Productos del menú ──────────────────────────────
   const products = [
