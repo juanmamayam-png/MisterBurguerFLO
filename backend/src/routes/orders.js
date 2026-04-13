@@ -205,6 +205,7 @@ router.patch('/:id/pay', auth, requireRole('boss'), validId, validators.confirmP
     if (total<=0) return await rollbackRes(client,res,409,'El pedido no tiene ítems activos para cobrar');
     if (total<1000) return await rollbackRes(client,res,409,`El total ($${total.toLocaleString('es-CO')}) es menor al mínimo permitido`);
     await client.query(`UPDATE orders SET status='paid',pay_method=$1,total_paid=$2,paid_at=NOW() WHERE id=$3`,[pay_method,total,order_id]);
+    // Liberar mesa de forma segura (puede ya estar libre si hubo un error previo)
     await client.query(`UPDATE tables SET status='free' WHERE id=$1`,[order.table_id]);
     if (order.day_id) {
       await client.query(
@@ -246,6 +247,34 @@ router.patch('/:id/move', auth, requireRole('boss'), validId, validators.moveOrd
     await client.query('ROLLBACK').catch(()=>{});
     console.error('[Orders PATCH /move]',err.message);
     res.status(500).json({error:'Error al mover pedido'});
+  } finally { client.release(); }
+});
+
+
+// PATCH /api/orders/:id/cancel — SOLO JEFE: cancela y libera mesa sin importar estado
+router.patch('/:id/cancel', auth, requireRole('boss'), validId, async (req,res) => {
+  const order_id = parseInt(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const oRes = await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE',[order_id]);
+    const order = oRes.rows[0];
+    if (!order) return await rollbackRes(client,res,404,'Pedido no encontrado');
+    if (order.status==='paid') return await rollbackRes(client,res,409,'No se puede cancelar un pedido ya pagado');
+
+    // Cancelar todos los ítems activos
+    await client.query(`UPDATE order_items SET status='cancelled' WHERE order_id=$1 AND status='active'`,[order_id]);
+    // Marcar pedido como cancelado (usamos paid con total 0 para no romper FK, o mejor: eliminarlo)
+    // Mejor: eliminamos el pedido y liberamos la mesa
+    await client.query(`DELETE FROM orders WHERE id=$1`,[order_id]);
+    // Liberar la mesa
+    await client.query(`UPDATE tables SET status='free' WHERE id=$1`,[order.table_id]);
+    await client.query('COMMIT');
+    res.json({message:'Pedido cancelado y mesa liberada'});
+  } catch(err){
+    await client.query('ROLLBACK').catch(()=>{});
+    console.error('[Orders PATCH /cancel]',err.message);
+    res.status(500).json({error:'Error al cancelar pedido'});
   } finally { client.release(); }
 });
 
