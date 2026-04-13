@@ -49,13 +49,19 @@ CREATE TABLE IF NOT EXISTS tables (
   UNIQUE (number, floor, table_type)
 );
 
--- Migración segura: agregar columna si no existe
+-- Migración segura: agregar table_type si no existe
+-- Paso 1: agregar como nullable primero
+ALTER TABLE tables ADD COLUMN IF NOT EXISTS table_type VARCHAR(20) DEFAULT 'mesa';
+-- Paso 2: rellenar filas existentes con 'mesa'
+UPDATE tables SET table_type = 'mesa' WHERE table_type IS NULL;
+-- Paso 3: hacer NOT NULL
+ALTER TABLE tables ALTER COLUMN table_type SET NOT NULL;
+-- Paso 4: agregar check si no existe
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name='tables' AND column_name='table_type'
+    SELECT 1 FROM pg_constraint WHERE conname = 'tables_table_type_check'
   ) THEN
-    ALTER TABLE tables ADD COLUMN table_type VARCHAR(20) NOT NULL DEFAULT 'mesa'
+    ALTER TABLE tables ADD CONSTRAINT tables_table_type_check
       CHECK (table_type IN ('mesa','domicilio','para_llevar'));
   END IF;
 END $$;
