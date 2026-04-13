@@ -1,8 +1,3 @@
-/* ═══════════════════════════════════════════════
-   MISTER BURGER POS · app.js  v5 (con backend)
-   Usa API REST en lugar de localStorage.
-   Requiere api.js cargado antes.
-═══════════════════════════════════════════════ */
 'use strict';
 
 const CAT_EMOJI = { Hamburguesas:'🍔', Especiales:'🥩', 'Hot Dog':'🌭', Bebidas:'🥤', Infantil:'🍟', Entradas:'🥗' };
@@ -91,6 +86,16 @@ async function doLogin() {
   if (!username || !password) { toast('Completa usuario y contraseña', 'error'); return; }
   try {
     State.user = await API.login(username, password);
+    // Si no es admin, verificar que el local esté abierto
+    if (State.user.role !== 'boss') {
+      const day = await API.getCurrentDay().catch(() => null);
+      if (!day) {
+        API.logout();
+        State.user = null;
+        toast('El local está cerrado. Solo el Jefe puede ingresar cuando está cerrado. 🔒', 'error');
+        return;
+      }
+    }
     toast(`Bienvenido, ${State.user.name} 👋`, 'success');
     bootUser();
   } catch (err) {
@@ -289,7 +294,7 @@ function renderClientMenu() {
     if (_mFilter !== 'all' && p.category !== _mFilter) return false;
     if (_mSearch) { const q = _mSearch.toLowerCase(); return p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q); }
     return true;
-  });
+  }).sort((a, b) => a.price - b.price);  // ordenar de menor a mayor precio
   grid.innerHTML = products.map((p,i) => `
     <div class="pc" style="animation-delay:${Math.min(i,8)*.05}s">
       <div class="pc__img">
@@ -479,7 +484,7 @@ function renderOrderPanelHTML(table, order, isBoss) {
         ${order ? `<span class="badge badge-acc">#${order.id}</span>` : `<span class="badge badge-green">Nuevo</span>`}
       </div>
       <div class="cart-items" id="cart-items">${renderCartItems(order?.items, isPending)}</div>
-      <div class="cart-foot">${renderCartFoot(order?.items)}</div>
+      <div class="cart-foot">${renderCartFoot(order?.items, order, table?.table_type)}</div>
     </div>`;
 }
 
@@ -519,15 +524,18 @@ function renderCartItems(items = [], locked = false) {
   }).join('');
 }
 
-function renderCartFoot(items) {
+function renderCartFoot(items, order, tableType) {
   if (!items?.length) return `<div class="cr total"><span>TOTAL</span><span>${fmtCOP(0)}</span></div>`;
   const active    = items.filter(i => i.status === 'active');
   const cancelled = items.filter(i => i.status === 'cancelled');
   const total     = orderTotal(items);
+  // Mostrar nombre del mesero solo en mesas físicas
+  const showWaiter = tableType === 'mesa' && order?.waiter_name;
   return `
     <div class="cr"><span>Activos</span><span>${active.length}</span></div>
     ${cancelled.length ? `<div class="cr"><span style="color:var(--red)">Cancelados</span><span style="color:var(--red)">${cancelled.length}</span></div>` : ''}
-    <div class="cr total"><span>TOTAL</span><span>${fmtCOP(total)}</span></div>`;
+    <div class="cr total"><span>TOTAL</span><span>${fmtCOP(total)}</span></div>
+    ${showWaiter ? `<div class="cr" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)"><span style="color:var(--text-m);font-size:11px"><i class="fa-solid fa-user" style="color:var(--acc)"></i> Atendido por</span><span style="font-size:11px;font-weight:700;color:var(--text)">${order.waiter_name}</span></div>` : ''}`;
 }
 
 async function refreshOrderPanel() {
@@ -537,8 +545,9 @@ async function refreshOrderPanel() {
     try {
       State.activeOrder = await API.getOrder(State.activeOrder.id);
       const ci = $('cart-items'), cf = document.querySelector('.cart-foot');
+      const tbl = State.tables.find(x => x.id === State.selectedTable);
       if (ci) ci.innerHTML = renderCartItems(State.activeOrder.items, State.activeOrder.status === 'pending');
-      if (cf) cf.innerHTML = renderCartFoot(State.activeOrder.items);
+      if (cf) cf.innerHTML = renderCartFoot(State.activeOrder.items, State.activeOrder, tbl?.table_type);
     } catch {}
   }
 }
@@ -1161,38 +1170,45 @@ function _renderKitchenOrders(orders) {
     ? orders.filter(o => o.table_type === State.kitchTableType)
     : orders;
 
-  const visible = typeFiltered.filter(o => {
-    const items = o.items?.filter(i=>i.status==='active')||[];
-    return State.kitchTab==='food'
-      ? items.some(i => !isBev(i.category))
-      : items.some(i => isBev(i.category));
-  });
-
+  // Counts for tabs
   const fc = orders.filter(o=>(o.items||[]).filter(i=>i.status==='active').some(i=>!isBev(i.category))).length;
   const dc = orders.filter(o=>(o.items||[]).filter(i=>i.status==='active').some(i=>isBev(i.category))).length;
   const kc1=$('kc-food');    if(kc1)kc1.textContent=fc;
   const kc2=$('kc-drinks');  if(kc2)kc2.textContent=dc;
-
-  // Update type counts
   const tm=$('kc-mesa'); const td=$('kc-dom'); const tpl=$('kc-llevar');
-  if(tm) tm.textContent=orders.filter(o=>o.table_type==='mesa').length;
-  if(td) td.textContent=orders.filter(o=>o.table_type==='domicilio').length;
+  if(tm)  tm.textContent=orders.filter(o=>o.table_type==='mesa').length;
+  if(td)  td.textContent=orders.filter(o=>o.table_type==='domicilio').length;
   if(tpl) tpl.textContent=orders.filter(o=>o.table_type==='para_llevar').length;
 
   const container = $('kitch-content'); if (!container) return;
+
+  // Filtrar pedidos que tengan al menos algún ítem activo
+  const visible = typeFiltered.filter(o => (o.items||[]).some(i=>i.status==='active'));
   if (!visible.length) {
     container.innerHTML = `<div class="kitch-empty"><i class="fa-solid fa-check-circle"></i><h3>Sin pedidos</h3><p>No hay pedidos pendientes</p></div>`;
     return;
   }
-  container.innerHTML = `<div class="kitch-grid">${visible.map(o => {
+
+  // Función para renderizar una tarjeta de pedido mostrando comida y/o bebidas
+  function renderKoCard(o, showFood, showDrinks) {
     const ttype = o.table_type || 'mesa';
-    const tLabel = ttype==='mesa'?`Mesa ${o.table_number} · Piso ${o.table_floor}`
-                  :ttype==='domicilio'?`Domicilio ${o.table_number}`
-                  :`Para llevar ${o.table_number}`;
-    const tIcon  = {mesa:'🪑',domicilio:'🛵',para_llevar:'🥡'}[ttype]||'🪑';
-    const items = (o.items||[]).filter(i=>i.status==='active').filter(i=>State.kitchTab==='food'?!isBev(i.category):isBev(i.category));
-    if (!items.length) return '';
+    const tLabel = ttype==='mesa' ? `Mesa ${o.table_number} · Piso ${o.table_floor}`
+                  : ttype==='domicilio' ? `Domicilio ${o.table_number}`
+                  : `Para llevar ${o.table_number}`;
+    const tIcon = {mesa:'🪑', domicilio:'🛵', para_llevar:'🥡'}[ttype] || '🪑';
+    const allActive = (o.items||[]).filter(i => i.status==='active');
+    const foodItems  = allActive.filter(i => !isBev(i.category));
+    const drinkItems = allActive.filter(i =>  isBev(i.category));
+    const itemsToShow = [
+      ...(showFood   ? foodItems  : []),
+      ...(showDrinks ? drinkItems : []),
+    ];
+    if (!itemsToShow.length) return '';
     const mins = elapsed(o.created_at); const isNew = mins < 2;
+    const foodHtml  = showFood  ? foodItems.map(it  => renderKoItem(it)).join('') : '';
+    const divider   = (showFood && showDrinks && foodItems.length && drinkItems.length)
+      ? '<div class="ki-divider"><i class="fa-solid fa-wine-glass"></i> Bebidas</div>' : '';
+    const drinkHtml = showDrinks ? drinkItems.map(it => renderKoItem(it)).join('') : '';
     return `<div class="ko${isNew?' new-order':''} ko-type-${ttype}">
       <div class="ko-head">
         <div>
@@ -1201,59 +1217,21 @@ function _renderKitchenOrders(orders) {
         </div>
         <div class="ko-timer ${timerClass(o.created_at)}">${elapsedStr(o.created_at)}</div>
       </div>
-      <div class="ko-items">${items.map(it => `<div class="ko-item">
-        ${it.image?`<img src="${it.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0">`:`<span class="ki-em">${it.emoji||'🍔'}</span>`}
-        <div class="ki-info">
-          <div class="ki-name">${it.product_name||'?'} ${it.bread_type?`<span class="ki-bread">${it.bread_type==='platano'?'🍌 Plátano':'🍞 Pan'}</span>`:''}</div>
-          ${it.notes?`<div class="ki-notes">${it.notes}</div>`:''}
-        </div>
-        <div class="ki-qty">×${it.quantity}</div>
-      </div>`).join('')}</div>
+      <div class="ko-items">${foodHtml}${divider}${drinkHtml}</div>
     </div>`;
-  }).join('')}</div>`;
-}
-let _kitchSound = true;
-function toggleKitchSound() {
-  _kitchSound = !_kitchSound;
-  const btn = $('kitch-sound-btn');
-  if (btn) btn.innerHTML = _kitchSound ? '<i class="fa-solid fa-bell"></i>' : '<i class="fa-solid fa-bell-slash"></i>';
-  toast(_kitchSound ? 'Sonido activado' : 'Sonido desactivado', 'info');
-}
-function playKitchBeep() {
-  try {
-    const ac = new (window.AudioContext||window.webkitAudioContext)();
-    const osc=ac.createOscillator(); const gain=ac.createGain();
-    osc.connect(gain); gain.connect(ac.destination);
-    osc.frequency.value=880; osc.type='sine';
-    gain.gain.setValueAtTime(.4,ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.4);
-    osc.start(ac.currentTime); osc.stop(ac.currentTime+.4);
-  } catch {}
-}
+  }
 
-/* ─────────────────────────────────────────────
-   MODALES
-───────────────────────────────────────────── */
-function openModal(id) { $(id)?.classList.remove('hidden'); }
-function closeModal(id) { $(id)?.classList.add('hidden'); }
-document.addEventListener('click', e => { if (e.target.classList.contains('modal-wrap')) e.target.classList.add('hidden'); });
+  function renderKoItem(it) {
+    return `<div class="ko-item ${isBev(it.category)?'ko-item--drink':''}">
+      ${it.image?`<img src="${it.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0">`:`<span class="ki-em">${it.emoji||'🍔'}</span>`}
+      <div class="ki-info">
+        <div class="ki-name">${it.product_name||'?'} ${it.bread_type?`<span class="ki-bread">${it.bread_type==='platano'?'🍌 Plátano':'🍞 Pan'}</span>`:''}</div>
+        ${it.notes?`<div class="ki-notes">${it.notes}</div>`:''}
+      </div>
+      <div class="ki-qty">×${it.quantity}</div>
+    </div>`;
+  }
 
-/* ─────────────────────────────────────────────
-   INLINE CSS para layout
-───────────────────────────────────────────── */
-(function injectCSS() {
-  const s = document.createElement('style');
-  s.textContent = `
-    .tables-order-layout{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
-    .tables-panel{min-width:0}
-    .order-side-panel{background:var(--bg-1);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;position:sticky;top:calc(var(--bar-h)+12px);max-height:calc(100vh - var(--bar-h) - 24px);overflow-y:auto}
-    .order-side-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;gap:10px;color:var(--text-dim);text-align:center}
-    .order-side-empty i{font-size:36px}
-    .order-side-empty p{font-size:12px;font-weight:600;line-height:1.5}
-    .order-side-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
-    .order-side-header h3{font-size:18px}
-    .orders-section{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
-    @media(max-width:900px){.tables-order-layout{grid-template-columns:1fr}.order-side-panel{position:static;max-height:none}}
-  `;
-  document.head.appendChild(s);
-})();
+  // Mostrar todo: comida arriba, bebidas abajo dentro de cada tarjeta
+  container.innerHTML = `<div class="kitch-grid">${visible.map(o => renderKoCard(o, true, true)).join('')}</div>`;
+}
