@@ -206,7 +206,7 @@ function updateLocalBadges() {
     : false;
   const cls  = open ? 'status-pill open' : 'status-pill closed';
   const html = open ? '<span class="dot"></span><span>Abierto</span>' : '<span class="dot"></span><span>Cerrado</span>';
-  ['cn-status','st-status'].forEach(id => { const el=$(id); if(el){ el.className=cls; el.innerHTML=html; }});
+  ['cn-status','st-status','kitch-status'].forEach(id => { const el=$(id); if(el){ el.className=cls; el.innerHTML=html; }});
   const stxt = $('st-status-txt'); if (stxt) stxt.textContent = open ? 'Abierto' : 'Cerrado';
   const cb   = $('closed-banner');  if (cb) cb.classList.toggle('hidden', open);
   const lb   = $('nav-local'); const lt = $('nav-local-txt');
