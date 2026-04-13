@@ -144,12 +144,31 @@ function logout() {
 ───────────────────────────────────────────── */
 async function loadCurrentDay() {
   try {
-    State.currentDay = await API.getCurrentDay();
-    Cache.set(Cache.K.day, State.currentDay);
+    // Llamada directa al servidor — sin caché intermedia
+    const headers = { 'Content-Type': 'application/json' };
+    const token = TokenStore.get();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch('/api/days/current', { headers, cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      State.currentDay = data;
+      // Guardar en cache para uso offline
+      try { localStorage.setItem('mb_day_fresh', JSON.stringify({ v: data, t: Date.now() })); } catch(e) {}
+    } else {
+      State.currentDay = null;
+    }
   } catch {
-    // Si no hay red, usar caché
-    const cached = Cache.get(Cache.K.day);
-    State.currentDay = cached !== undefined ? cached : null;
+    // Solo en error de RED usar el cache guardado
+    try {
+      const raw = localStorage.getItem('mb_day_fresh');
+      if (raw) {
+        const { v, t } = JSON.parse(raw);
+        // Solo usar si es de las últimas 12 horas
+        State.currentDay = (Date.now() - t < 43200000) ? v : null;
+      } else {
+        State.currentDay = null;
+      }
+    } catch { State.currentDay = null; }
   }
 }
 
@@ -845,32 +864,33 @@ async function confirmMove() {
 ───────────────────────────────────────────── */
 let _tempInv = [{ description:'', amount:'' }];
 async function toggleLocal() {
-  // Siempre consultar el servidor para tener el estado real
+  // Deshabilitar el botón mientras carga para evitar doble click
+  const btn = $('nav-local');
+  if (btn) btn.style.pointerEvents = 'none';
   try {
     await loadCurrentDay();
-  } catch(e) { /* continúa con el estado local */ }
-
-  if (State.currentDay) {
-    openCloseDayModal();
-  } else {
-    openOpenModal();
+    if (State.currentDay) {
+      openCloseDayModal();
+    } else {
+      openOpenModal();
+    }
+  } catch(e) {
+    toast('Error al consultar el estado del local. Intenta de nuevo.', 'error');
+  } finally {
+    if (btn) btn.style.pointerEvents = '';
   }
 }
 
 function openOpenModal() {
   _tempInv = [{ description:'', amount:'' }];
-  // Verificar que los elementos del modal existen antes de manipularlos
-  const invRows   = $('inv-rows');
-  const openNotes = $('open-notes');
-  const invTotal  = $('inv-total');
-  if (!invRows || !openNotes || !invTotal) {
-    toast('Error al abrir el formulario. Recarga la página.','error');
-    return;
-  }
   renderInvRows();
-  openNotes.value = '';
+  const openNotes = $('open-notes');
+  if (openNotes) openNotes.value = '';
   recalcInv();
-  openModal('modal-open');
+  // Forzar que el modal sea visible
+  const modal = $('modal-open');
+  if (!modal) { toast('Error: modal no encontrado. Recarga la página.','error'); return; }
+  modal.classList.remove('hidden');
 }
 function renderInvRows() {
   $('inv-rows').innerHTML = _tempInv.map((inv,i) => `
@@ -884,28 +904,36 @@ function addInvRow() { _tempInv.push({ description:'', amount:'' }); renderInvRo
 function removeInv(i) { _tempInv.splice(i,1); if(!_tempInv.length)_tempInv=[{description:'',amount:''}]; renderInvRows(); recalcInv(); }
 function recalcInv() { $('inv-total').textContent = fmtCOP(_tempInv.reduce((s,x)=>s+(parseFloat(x.amount)||0),0)); }
 async function confirmOpen() {
-  const investments = _tempInv.filter(x=>x.description||parseFloat(x.amount)).map(x=>({description:x.description||'Sin descripción',amount:parseFloat(x.amount)||0}));
-  const notes       = ($('open-notes')?.value || '').trim();
+  const btn = document.querySelector('#modal-open .pill-btn--green');
+  if (btn) { btn.disabled = true; btn.textContent = 'Abriendo…'; }
+  const investments = _tempInv
+    .filter(x => x.description || parseFloat(x.amount))
+    .map(x => ({ description: x.description || 'Inversión', amount: parseFloat(x.amount) || 0 }));
+  const notes = ($('open-notes')?.value || '').trim();
   try {
     await API.openDay(investments, notes);
+    // Limpiar cache viejo de jornada
+    try { localStorage.removeItem('mb_day_fresh'); } catch(e) {}
     await loadCurrentDay();
-    closeModal('modal-open');
-    toast('¡Local abierto! 🏪 Buena jornada','success');
+    $('modal-open').classList.add('hidden');
+    toast('¡Local abierto! 🏪 Buena jornada', 'success');
     updateLocalBadges();
     renderStaffNav();
     staffSection('dashboard');
   } catch (err) {
-    // Si ya hay jornada abierta, actualizar estado local
     if (err.message && err.message.includes('Ya hay una jornada')) {
+      try { localStorage.removeItem('mb_day_fresh'); } catch(e) {}
       await loadCurrentDay();
-      closeModal('modal-open');
+      $('modal-open').classList.add('hidden');
       updateLocalBadges();
       renderStaffNav();
-      toast('Ya hay una jornada abierta','info');
+      toast('Ya hay una jornada abierta — sincronizado', 'info');
       staffSection('dashboard');
     } else {
-      toast(err.message || 'Error al abrir jornada','error');
+      toast(err.message || 'Error al abrir jornada', 'error');
     }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-store"></i> Abrir Local y Comenzar'; }
   }
 }
 
@@ -932,10 +960,13 @@ async function openCloseDayModal() {
 }
 async function confirmClose() {
   try {
-    await API.closeDay(State.currentDay.id, $('close-notes').value.trim());
+    await API.closeDay(State.currentDay.id, ($('close-notes')?.value || '').trim());
     State.currentDay = null;
+    // Limpiar cache de jornada al cerrar
+    try { localStorage.removeItem('mb_day_fresh'); } catch(e) {}
+    try { localStorage.removeItem(Cache.K.day); } catch(e) {}
     closeModal('modal-close-day');
-    toast('Jornada cerrada 🔒','info');
+    toast('Jornada cerrada 🔒', 'info');
     updateLocalBadges();
     renderStaffNav();
     staffSection('reports');
