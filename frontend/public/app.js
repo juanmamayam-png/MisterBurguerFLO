@@ -60,8 +60,8 @@ window.addEventListener('DOMContentLoaded', () => {
     API.me().then(user => {
       State.user = user;
       // Restaurar caché de productos y tablas inmediatamente
-      const cachedProducts = Cache.get(Cache.KEYS.products);
-      const cachedTables   = Cache.get(Cache.KEYS.tables);
+      const cachedProducts = Cache.get(Cache.K.products);
+      const cachedTables   = Cache.get(Cache.K.tables);
       if (cachedProducts) State.products = cachedProducts;
       if (cachedTables)   State.tables   = cachedTables;
       bootUser();
@@ -145,10 +145,10 @@ function logout() {
 async function loadCurrentDay() {
   try {
     State.currentDay = await API.getCurrentDay();
-    Cache.set(Cache.KEYS.currentDay, State.currentDay);
+    Cache.set(Cache.K.day, State.currentDay);
   } catch {
     // Si no hay red, usar caché
-    const cached = Cache.get(Cache.KEYS.currentDay);
+    const cached = Cache.get(Cache.K.day);
     State.currentDay = cached !== undefined ? cached : null;
   }
 }
@@ -298,12 +298,12 @@ let _mFilter = 'all', _mSearch = '';
 async function loadPublicMenu() {
   try {
     State.products = await API.getProducts({ status: 'active' });
-    Cache.set(Cache.KEYS.products, State.products);
+    Cache.set(Cache.K.products, State.products);
     renderClientMenu();
     updateLocalBadges();
   } catch {
     // Si no hay red, cargar desde caché
-    const cached = Cache.get(Cache.KEYS.products);
+    const cached = Cache.get(Cache.K.products);
     if (cached) State.products = cached;
     renderClientMenu();
   }
@@ -409,8 +409,8 @@ async function renderTables(c) {
       State.products = await API.getProducts({ status:'active' });
     }
     // Guardar en caché local para sobrevivir apagones
-    Cache.set(Cache.KEYS.tables, State.tables);
-    Cache.set(Cache.KEYS.products, State.products);
+    Cache.set(Cache.K.tables, State.tables);
+    Cache.set(Cache.K.products, State.products);
   } catch (err) { toast('Error cargando mesas','error'); return; }
 
   const isBoss   = State.user.role === 'boss';
