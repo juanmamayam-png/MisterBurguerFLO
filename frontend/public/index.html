@@ -374,6 +374,7 @@
     </div>
   </header>
 
+  <!-- Tabs tipo: Comida / Bebidas -->
   <div class="kitch-tabs">
     <button class="kitch-tab active" id="ktab-food" onclick="kitchTab('food',this)">
       <i class="fa-solid fa-burger"></i> Comida
@@ -382,6 +383,21 @@
     <button class="kitch-tab" id="ktab-drinks" onclick="kitchTab('drinks',this)">
       <i class="fa-solid fa-wine-glass"></i> Bebidas
       <span class="kitch-count" id="kc-drinks">0</span>
+    </button>
+  </div>
+  <!-- Filtro por tipo de pedido: Mesa / Domicilio / Para llevar -->
+  <div class="kitch-type-bar">
+    <button class="kitch-type-btn active" onclick="kitchTypeFilter(null,this)">
+      <i class="fa-solid fa-border-all"></i> Todos
+    </button>
+    <button class="kitch-type-btn" onclick="kitchTypeFilter('mesa',this)">
+      🪑 Mesas <span class="kitch-count kitch-count--sm" id="kc-mesa">0</span>
+    </button>
+    <button class="kitch-type-btn" onclick="kitchTypeFilter('domicilio',this)">
+      🛵 Domicilios <span class="kitch-count kitch-count--sm" id="kc-dom">0</span>
+    </button>
+    <button class="kitch-type-btn" onclick="kitchTypeFilter('para_llevar',this)">
+      🥡 Para llevar <span class="kitch-count kitch-count--sm" id="kc-llevar">0</span>
     </button>
   </div>
 
