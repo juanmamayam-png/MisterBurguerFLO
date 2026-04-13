@@ -181,9 +181,9 @@ async function migrate() {
   try {
     console.log('[Migrate] Ejecutando migraciones…');
     await client.query(SQL);
-    console.log('[Migrate] ✅ Tablas creadas/actualizadas correctamente');
+    console.log('[Migrate] Tablas creadas/actualizadas correctamente');
   } catch (err) {
-    console.error('[Migrate] ❌ Error:', err.message);
+    console.error('[Migrate] Error:', err.message);
     process.exit(1);
   } finally {
     client.release();
