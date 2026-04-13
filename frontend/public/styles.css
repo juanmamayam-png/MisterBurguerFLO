@@ -1016,3 +1016,87 @@ h1,h2,h3,h4{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
   .contact-map-overlay { flex-direction: column; align-items: flex-start; gap: 10px; }
   .contact-map-open { align-self: stretch; justify-content: center; }
 }
+
+/* ═══════════════════════════════════════════════
+   NUEVAS FUNCIONES v5.1
+   · Domicilios / Para llevar
+   · Pan / Plátano
+   · Filtro de tipo en cocina
+═══════════════════════════════════════════════ */
+
+/* ── Bread selector en modal ── */
+.bread-btn { transition: all .2s ease !important; }
+.bread-btn.active {
+  background: var(--acc) !important;
+  border-color: var(--acc) !important;
+  color: var(--bg) !important;
+}
+.bread-btn:not(.active):hover {
+  border-color: var(--border-l) !important;
+  background: var(--bg-3) !important;
+}
+
+/* ── Cocina: barra de filtro por tipo ── */
+.kitch-type-bar {
+  display: flex;
+  gap: 4px;
+  background: #09120a;
+  border-bottom: 1px solid rgba(62,184,122,.15);
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.kitch-type-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border: 1.5px solid rgba(62,184,122,.2);
+  border-radius: 20px;
+  background: transparent;
+  color: #4a8060;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .2s;
+  white-space: nowrap;
+}
+.kitch-type-btn:hover { color: var(--green); border-color: rgba(62,184,122,.4); }
+.kitch-type-btn.active {
+  background: rgba(62,184,122,.15);
+  color: var(--green);
+  border-color: var(--green);
+}
+.kitch-count--sm {
+  background: rgba(62,184,122,.25);
+  color: var(--green);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+/* ── Cocina: color de borde por tipo ── */
+.ko-type-mesa       { border-color: rgba(62,184,122,.3) !important; }
+.ko-type-domicilio  { border-color: rgba(59,157,232,.4) !important; }
+.ko-type-para_llevar{ border-color: rgba(245,166,35,.4)  !important; }
+
+.ko-type-domicilio .ko-head  { background: #0a0f1a !important; }
+.ko-type-para_llevar .ko-head{ background: #1a1000 !important; }
+
+/* ── Kit. item: etiqueta pan/plátano ── */
+.ki-bread {
+  display: inline-block;
+  background: rgba(245,166,35,.15);
+  color: var(--acc);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ── Tabla tipo domicilio/para llevar — tarjeta más ancha ── */
+.table-card .tc-num[style*="12px"] {
+  word-break: break-word;
+  line-height: 1.15;
+}
+
+/* ── Floor tabs wrapping on small screens ── */
+.floor-tabs { flex-wrap: wrap; }
