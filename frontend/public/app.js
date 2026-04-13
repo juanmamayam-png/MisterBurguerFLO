@@ -172,7 +172,7 @@ function renderStaffNav() {
 function navClick(id) {
   const map = { dashboard:'dashboard', tables:'tables', order:'order', orders:'orders',
     menuview:'menuview', products:'products', users:'users', reports:'reports' };
-  if (id === 'local') { toggleLocal(); return; }
+  if (id === 'local') { toggleLocal().catch(e => toast('Error al cambiar estado del local','error')); return; }
   if (map[id]) staffSection(map[id]);
 }
 function setActiveNav(id) {
@@ -796,11 +796,32 @@ async function confirmMove() {
    LOCAL (JORNADAS)
 ───────────────────────────────────────────── */
 let _tempInv = [{ description:'', amount:'' }];
-function toggleLocal() { State.currentDay ? openCloseDayModal() : openOpenModal(); }
+async function toggleLocal() {
+  // Siempre consultar el servidor para tener el estado real
+  try {
+    await loadCurrentDay();
+  } catch(e) { /* continúa con el estado local */ }
+
+  if (State.currentDay) {
+    openCloseDayModal();
+  } else {
+    openOpenModal();
+  }
+}
 
 function openOpenModal() {
   _tempInv = [{ description:'', amount:'' }];
-  renderInvRows(); $('open-notes').value = ''; recalcInv();
+  // Verificar que los elementos del modal existen antes de manipularlos
+  const invRows   = $('inv-rows');
+  const openNotes = $('open-notes');
+  const invTotal  = $('inv-total');
+  if (!invRows || !openNotes || !invTotal) {
+    toast('Error al abrir el formulario. Recarga la página.','error');
+    return;
+  }
+  renderInvRows();
+  openNotes.value = '';
+  recalcInv();
   openModal('modal-open');
 }
 function renderInvRows() {
@@ -816,16 +837,28 @@ function removeInv(i) { _tempInv.splice(i,1); if(!_tempInv.length)_tempInv=[{des
 function recalcInv() { $('inv-total').textContent = fmtCOP(_tempInv.reduce((s,x)=>s+(parseFloat(x.amount)||0),0)); }
 async function confirmOpen() {
   const investments = _tempInv.filter(x=>x.description||parseFloat(x.amount)).map(x=>({description:x.description||'Sin descripción',amount:parseFloat(x.amount)||0}));
-  const notes       = $('open-notes').value.trim();
+  const notes       = ($('open-notes')?.value || '').trim();
   try {
     await API.openDay(investments, notes);
     await loadCurrentDay();
     closeModal('modal-open');
-    toast('¡Local abierto! 🏪','success');
+    toast('¡Local abierto! 🏪 Buena jornada','success');
     updateLocalBadges();
     renderStaffNav();
     staffSection('dashboard');
-  } catch (err) { toast(err.message,'error'); }
+  } catch (err) {
+    // Si ya hay jornada abierta, actualizar estado local
+    if (err.message && err.message.includes('Ya hay una jornada')) {
+      await loadCurrentDay();
+      closeModal('modal-open');
+      updateLocalBadges();
+      renderStaffNav();
+      toast('Ya hay una jornada abierta','info');
+      staffSection('dashboard');
+    } else {
+      toast(err.message || 'Error al abrir jornada','error');
+    }
+  }
 }
 
 async function openCloseDayModal() {
