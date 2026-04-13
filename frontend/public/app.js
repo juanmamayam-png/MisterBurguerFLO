@@ -111,7 +111,34 @@ function bootUser() {
     });
     // Iniciar polling del estado del local (cada 20 segundos)
     _startStatusPoll();
+    // Iniciar heartbeat de sesión (cada 10 segundos)
+    _startSessionHeartbeat();
   }
+}
+
+let _heartbeatTimer = null;
+function _startSessionHeartbeat() {
+  if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+  _heartbeatTimer = setInterval(async () => {
+    if (!State.user) { clearInterval(_heartbeatTimer); return; }
+    try {
+      const token = TokenStore.get();
+      if (!token) { logout(); return; }
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` },
+        cache: 'no-store'
+      });
+      if (res.status === 401) {
+        const data = await res.json().catch(() => ({}));
+        TokenStore.clear();
+        if (data.code === 'SESSION_DISPLACED') {
+          window.dispatchEvent(new CustomEvent('auth:displaced'));
+        } else {
+          window.dispatchEvent(new CustomEvent('auth:expired'));
+        }
+      }
+    } catch { /* sin conexión — silencioso */ }
+  }, 10000); // cada 10 segundos
 }
 
 function _startStatusPoll() {
@@ -168,6 +195,7 @@ function logout() {
   if (State.kitchTimer)  { clearInterval(State.kitchTimer);  State.kitchTimer  = null; }
   if (_statusPollTimer)  { clearInterval(_statusPollTimer);  _statusPollTimer  = null; }
   if (_clientPollTimer)  { clearInterval(_clientPollTimer);  _clientPollTimer  = null; }
+  if (_heartbeatTimer)   { clearInterval(_heartbeatTimer);   _heartbeatTimer   = null; }
   toast('Sesión cerrada', 'info');
   showApp('client');
   loadPublicMenu();
