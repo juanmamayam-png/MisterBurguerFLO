@@ -38,6 +38,14 @@ window.addEventListener('DOMContentLoaded', () => {
     logout();
   });
 
+  // Sesión desplazada — otro dispositivo inició sesión con el mismo usuario
+  window.addEventListener('auth:displaced', () => {
+    // Mostrar modal de aviso antes de cerrar sesión
+    const msg = '⚠️ Tu sesión fue iniciada en otro dispositivo.\n\nSolo se permite una sesión activa por usuario.\n\nSerás desconectado de este dispositivo.';
+    alert(msg);
+    logout();
+  });
+
   // Cuando se recupera la conexión, refrescar la pantalla activa
   window.addEventListener('mb:refresh', async () => {
     if (!State.user) return;
