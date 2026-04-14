@@ -884,6 +884,12 @@ async function openPayModal(orderId) {
       <div class="ptotal"><span>TOTAL</span><span>${fmtCOP(total)}</span></div>`;
     $('pay-recv').value = ''; $('pay-change').classList.add('hidden');
     $('pay-meth').value = 'efectivo'; $('pay-oid').value = orderId;
+    $('pay-print-opt').value = 'none';
+    document.querySelectorAll('.print-opt-btn').forEach(b => b.classList.remove('active'));
+    const noneBtn = document.getElementById('print-none');
+    if (noneBtn) noneBtn.classList.add('active');
+    // Guardar datos del pedido para impresión posterior
+    State._lastPaidOrder = order;
     openModal('modal-pay');
   } catch (err) { toast(err.message,'error'); }
 }
@@ -898,18 +904,23 @@ function calcChange() {
   else el.classList.add('hidden');
 }
 async function confirmPay() {
-  const orderId = parseInt($('pay-oid').value);
-  const method  = $('pay-meth').value;
+  const orderId  = parseInt($('pay-oid').value);
+  const method   = $('pay-meth').value;
+  const printOpt = $('pay-print-opt')?.value || 'none';  // 'none' | 'receipt' | 'invoice'
   try {
     await API.confirmPayment(orderId, method);
-    // Reset state before refreshing
+    // Guardar el pedido antes de limpiar el estado
+    const lastOrder = State._lastPaidOrder;
     State.selectedTable = null; State.activeOrder = null;
     closeModal('modal-pay');
-    // Refresh everything
     State.tables = await API.getTables();
     await loadCurrentDay();
     updateLocalBadges();
-    toast('✅ Pago confirmado — Mesa liberada','success');
+    toast('Pago confirmado — Mesa liberada', 'success');
+    // Imprimir si se seleccionó
+    if ((printOpt === 'receipt' || printOpt === 'invoice') && lastOrder) {
+      printDocument(lastOrder, method, printOpt);
+    }
     staffSection('tables');
   } catch (err) { toast(err.message,'error'); }
 }
@@ -1028,23 +1039,87 @@ async function confirmOpen() {
 async function openCloseDayModal() {
   if (!State.currentDay) return;
   try {
-    const orders = await API.getOrders({ status:'active' });
-    const pending = await API.getOrders({ status:'pending' });
-    if (orders.length + pending.length > 0) { toast(`${orders.length+pending.length} pedido(s) sin cobrar. Ciérralos primero.`,'error'); return; }
+    const [activeOrders, pendingOrders] = await Promise.all([
+      API.getOrders({ status:'active' }),
+      API.getOrders({ status:'pending' }),
+    ]);
+    if (activeOrders.length + pendingOrders.length > 0) {
+      toast(`${activeOrders.length + pendingOrders.length} pedido(s) sin cobrar. Ciérralos primero.`, 'error');
+      return;
+    }
+
     const d   = State.currentDay;
-    const inv = d.total_investment || 0;
-    const net = (d.gross_profit||0) - inv;
+    const inv = parseInt(d.total_investment) || 0;
+    const net = (parseInt(d.gross_profit)||0) - inv;
+
+    // Resumen financiero
     $('close-sum').innerHTML = `
       <div class="cds-grid">
-        <div class="cds-box yellow"><div class="cds-l">Inversión</div><div class="cds-v">${fmtCOP(inv)}</div></div>
-        <div class="cds-box acc"><div class="cds-l">Ventas</div><div class="cds-v">${fmtCOP(d.total_sales||0)}</div></div>
-        <div class="cds-box"><div class="cds-l" style="color:var(--text-m)">Costo prod.</div><div class="cds-v" style="color:var(--text-m)">${fmtCOP(d.total_cost||0)}</div></div>
+        <div class="cds-box yellow"><div class="cds-l">Inversión del día</div><div class="cds-v">${fmtCOP(inv)}</div></div>
+        <div class="cds-box acc"><div class="cds-l">Total vendido</div><div class="cds-v">${fmtCOP(d.total_sales||0)}</div></div>
+        <div class="cds-box"><div class="cds-l" style="color:var(--text-m)">Costo producción</div><div class="cds-v" style="color:var(--text-m)">${fmtCOP(d.total_cost||0)}</div></div>
         <div class="cds-box ${net>=0?'green':'red'}"><div class="cds-l">Ganancia neta</div><div class="cds-v">${fmtCOP(net)}</div></div>
       </div>
-      <p style="font-size:12px;color:var(--text-m);margin-top:10px">Apertura: ${fmtTime(d.opened_at)}</p>`;
+      <p style="font-size:12px;color:var(--text-m);margin-top:8px">
+        <i class="fa-solid fa-clock"></i> Apertura: ${fmtTime(d.opened_at)}
+      </p>`;
+
+    // Cargar ventas por producto
+    const cpEl = $('close-products');
+    if (cpEl) {
+      cpEl.innerHTML = `<div style="color:var(--text-m);font-size:13px;padding:8px 0"><i class="fa-solid fa-spinner fa-spin"></i> Cargando detalle de productos…</div>`;
+      try {
+        const products = await API.getDayProducts(d.id);
+        if (products.length === 0) {
+          cpEl.innerHTML = `<div style="color:var(--text-m);font-size:13px;padding:8px 0">Sin ventas registradas en esta jornada.</div>`;
+        } else {
+          const totalVentas = products.reduce((s,p) => s + parseInt(p.total_revenue), 0);
+          cpEl.innerHTML = `
+            <div style="margin-top:4px;margin-bottom:8px">
+              <h4 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">
+                <i class="fa-solid fa-chart-bar" style="color:var(--acc)"></i>
+                Ventas por producto — ${products.length} producto(s)
+              </h4>
+            </div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr style="background:var(--bg-2)">
+                    <th style="padding:7px 10px;text-align:left;color:var(--text-m);font-weight:600;border-bottom:1px solid var(--border)">Producto</th>
+                    <th style="padding:7px 10px;text-align:center;color:var(--text-m);font-weight:600;border-bottom:1px solid var(--border)">Categoría</th>
+                    <th style="padding:7px 10px;text-align:center;color:var(--text-m);font-weight:600;border-bottom:1px solid var(--border)">Vendidos</th>
+                    <th style="padding:7px 10px;text-align:right;color:var(--text-m);font-weight:600;border-bottom:1px solid var(--border)">Total vendido</th>
+                    <th style="padding:7px 10px;text-align:right;color:var(--text-m);font-weight:600;border-bottom:1px solid var(--border)">Ganancia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${products.map((p,i) => `
+                    <tr style="background:${i%2===0?'transparent':'var(--bg-2)'}">
+                      <td style="padding:7px 10px;font-weight:600;color:var(--text)">${p.emoji||''} ${p.product_name}</td>
+                      <td style="padding:7px 10px;text-align:center;color:var(--text-m)">${p.category}</td>
+                      <td style="padding:7px 10px;text-align:center;font-weight:700;color:var(--acc)">${p.units_sold}</td>
+                      <td style="padding:7px 10px;text-align:right;font-family:'DM Mono',monospace;color:var(--text)">${fmtCOP(p.total_revenue)}</td>
+                      <td style="padding:7px 10px;text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${parseInt(p.total_profit)>=0?'var(--green)':'var(--red)'}">${fmtCOP(p.total_profit)}</td>
+                    </tr>`).join('')}
+                </tbody>
+                <tfoot>
+                  <tr style="background:var(--bg-1);border-top:2px solid var(--border)">
+                    <td colspan="3" style="padding:8px 10px;font-weight:700;color:var(--text)">TOTAL JORNADA</td>
+                    <td style="padding:8px 10px;text-align:right;font-weight:700;font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--acc)">${fmtCOP(totalVentas)}</td>
+                    <td style="padding:8px 10px;text-align:right;font-weight:700;font-family:'Bebas Neue',sans-serif;font-size:16px;color:${net>=0?'var(--green)':'var(--red)'}">${fmtCOP(net)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>`;
+        }
+      } catch {
+        cpEl.innerHTML = `<div style="color:var(--red);font-size:13px;padding:8px 0">No se pudo cargar el detalle de productos.</div>`;
+      }
+    }
+
     $('close-notes').value = '';
     openModal('modal-close-day');
-  } catch (err) { toast(err.message,'error'); }
+  } catch (err) { toast(err.message, 'error'); }
 }
 async function confirmClose() {
   try {
@@ -1522,6 +1597,87 @@ function _renderKitchenOrders(orders) {
   // Mostrar todo: comida arriba, bebidas abajo dentro de cada tarjeta
   container.innerHTML = `<div class="kitch-grid">${visible.map(o => renderKoCard(o, true, true)).join('')}</div>`;
 }
+
+/* ─────────────────────────────────────────────
+   IMPRESIÓN DE RECIBO / FACTURA
+───────────────────────────────────────────── */
+function printDocument(order, payMethod, type) {
+  const isInvoice = type === 'invoice';
+  const items     = order.items.filter(i => i.status === 'active');
+  const total     = orderTotal(order.items);
+  const now       = new Date();
+  const dateStr   = now.toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' });
+  const timeStr   = now.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' });
+  const tableName = order.table_type === 'mesa'
+    ? `Mesa ${order.table_number} · Piso ${order.table_floor}`
+    : order.table_type === 'domicilio'
+    ? `Domicilio ${order.table_number}`
+    : `Para llevar ${order.table_number}`;
+  const payLabels = { efectivo:'Efectivo', nequi:'Nequi', bancolombia:'Bancolombia', tarjeta:'Tarjeta' };
+
+  const win = window.open('', '_blank', 'width=400,height=600');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>${isInvoice ? 'Factura' : 'Recibo'} #${order.id}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family: 'Courier New', monospace; font-size: 13px; color: #000; padding: 16px; max-width: 320px; margin: 0 auto; }
+      .center { text-align: center; }
+      .bold   { font-weight: bold; }
+      .big    { font-size: 18px; font-weight: bold; }
+      .line   { border-top: 1px dashed #000; margin: 8px 0; }
+      .line2  { border-top: 2px solid #000; margin: 8px 0; }
+      .row    { display: flex; justify-content: space-between; margin: 3px 0; }
+      .row .name { flex: 1; margin-right: 8px; }
+      .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 15px; margin-top: 4px; }
+      .footer { text-align: center; margin-top: 12px; font-size: 11px; }
+      @media print { body { padding: 4px; } button { display: none; } }
+    </style>
+  </head><body>
+    <div class="center big">MISTER BURGER</div>
+    <div class="center" style="font-size:11px;margin-top:2px">Florencia, Caquetá</div>
+    ${isInvoice ? '<div class="center bold" style="margin-top:6px;font-size:14px">FACTURA DE VENTA</div>' : '<div class="center" style="margin-top:6px">** RECIBO DE PAGO **</div>'}
+    <div class="line2"></div>
+    <div class="row"><span>${isInvoice ? 'Factura' : 'Recibo'} N°:</span><span><b>${order.id}</b></span></div>
+    <div class="row"><span>Fecha:</span><span>${dateStr}</span></div>
+    <div class="row"><span>Hora:</span><span>${timeStr}</span></div>
+    <div class="row"><span>Mesa/Pedido:</span><span>${tableName}</span></div>
+    ${order.waiter_name ? `<div class="row"><span>Atendido por:</span><span>${order.waiter_name}</span></div>` : ''}
+    <div class="line"></div>
+    <div class="bold" style="margin-bottom:4px">DETALLE DEL PEDIDO:</div>
+    ${items.map(it => `
+      <div class="row">
+        <span class="name">${it.product_name}${it.bread_type ? ` (${it.bread_type === 'platano' ? 'Plátano' : 'Pan'})` : ''}</span>
+        <span>${it.quantity} x ${fmtCOP(it.unit_price)}</span>
+      </div>
+      <div class="row" style="color:#555">
+        <span></span>
+        <span>${fmtCOP(it.unit_price * it.quantity)}</span>
+      </div>`).join('')}
+    <div class="line"></div>
+    <div class="total-row"><span>TOTAL:</span><span>${fmtCOP(total)}</span></div>
+    <div class="row"><span>Método de pago:</span><span>${payLabels[payMethod] || payMethod}</span></div>
+    <div class="line2"></div>
+    ${isInvoice ? `
+      <div style="font-size:11px;margin:6px 0">
+        <div>Régimen simplificado</div>
+        <div>No somos responsables de IVA</div>
+      </div>
+      <div class="line"></div>` : ''}
+    <div class="footer">
+      ¡Gracias por su preferencia!<br>
+      Vuelva pronto a Mister Burger
+    </div>
+    <div style="margin-top:16px;text-align:center">
+      <button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer;border:1px solid #000;background:#fff">
+        Imprimir
+      </button>
+    </div>
+  </body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
+}
+
 /* ─────────────────────────────────────────────
    MODALES — abrir / cerrar
 ───────────────────────────────────────────── */
@@ -1586,4 +1742,15 @@ function playKitchBeep() {
     osc.start(ac.currentTime);
     osc.stop(ac.currentTime + 0.4);
   } catch {}
+}
+
+
+/* ─────────────────────────────────────────────
+   SELECTOR DE IMPRESIÓN EN COBRO
+───────────────────────────────────────────── */
+function selectPrintOpt(val, btn) {
+  document.querySelectorAll('.print-opt-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const el = $('pay-print-opt');
+  if (el) el.value = val;
 }
