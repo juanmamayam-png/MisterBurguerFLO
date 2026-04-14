@@ -916,6 +916,14 @@ async function openPayModal(orderId) {
     const noneBtn = $('print-none');
     if (noneBtn) noneBtn.classList.add('active');
 
+    // Mostrar sección de efectivo por defecto
+    const methEl2 = $('pay-meth');
+    if (methEl2) methEl2.value = 'efectivo';
+    const cashSect = $('pay-cash-section');
+    if (cashSect) cashSect.style.display = 'block';
+    const shortEl = $('pay-short');
+    if (shortEl) shortEl.classList.add('hidden');
+
     State._lastPaidOrder = { ...order, items };
     openModal('modal-pay');
   } catch (err) {
@@ -923,31 +931,70 @@ async function openPayModal(orderId) {
     toast(err.message || 'Error al abrir el modal de pago','error');
   }
 }
+function onPayMethChange() {
+  const meth = $('pay-meth')?.value;
+  const cashSection = $('pay-cash-section');
+  if (cashSection) {
+    cashSection.style.display = meth === 'efectivo' ? 'block' : 'none';
+  }
+  // Limpiar validaciones
+  const shortEl = $('pay-short');
+  const changeEl = $('pay-change');
+  if (shortEl)  shortEl.classList.add('hidden');
+  if (changeEl) changeEl.classList.add('hidden');
+  const recvEl = $('pay-recv');
+  if (recvEl) recvEl.value = '';
+}
+
 function calcChange() {
-  const oid = parseInt($('pay-oid').value);
-  const order = State.activeOrder?.id === oid ? State.activeOrder : null;
+  const oid   = parseInt($('pay-oid')?.value);
+  const order = State._lastPaidOrder?.id === oid ? State._lastPaidOrder : State.activeOrder;
   if (!order) return;
-  const total   = orderTotal(order.items);
-  const recv    = parseFloat($('pay-recv').value) || 0;
-  const el      = $('pay-change');
-  if (recv >= total) { el.textContent = `💵 Cambio: ${fmtCOP(recv-total)}`; el.classList.remove('hidden'); }
-  else el.classList.add('hidden');
+  const total    = orderTotal(order.items || []);
+  const recv     = parseFloat($('pay-recv')?.value) || 0;
+  const changeEl = $('pay-change');
+  const shortEl  = $('pay-short');
+  if (!changeEl || !shortEl) return;
+
+  if (recv <= 0) {
+    changeEl.classList.add('hidden');
+    shortEl.classList.add('hidden');
+  } else if (recv >= total) {
+    const cambio = recv - total;
+    changeEl.innerHTML = `<i class="fa-solid fa-coins"></i> Cambio a devolver: <strong>${fmtCOP(cambio)}</strong>`;
+    changeEl.classList.remove('hidden');
+    shortEl.classList.add('hidden');
+  } else {
+    const falta = total - recv;
+    shortEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Faltan <strong>${fmtCOP(falta)}</strong> para completar el pago`;
+    shortEl.classList.remove('hidden');
+    changeEl.classList.add('hidden');
+  }
 }
 async function confirmPay() {
-  const orderId  = parseInt($('pay-oid').value);
-  const method   = $('pay-meth').value;
-  const printOpt = $('pay-print-opt')?.value || 'none';  // 'none' | 'receipt' | 'invoice'
+  const orderId  = parseInt($('pay-oid')?.value);
+  const method   = $('pay-meth')?.value;
+  const printOpt = $('pay-print-opt')?.value || 'none';
+  const lastOrder = State._lastPaidOrder;
+
+  // Validar monto en efectivo
+  if (method === 'efectivo') {
+    const recv  = parseFloat($('pay-recv')?.value) || 0;
+    const total = orderTotal(lastOrder?.items || []);
+    if (recv > 0 && recv < total) {
+      toast(`El monto recibido ($${recv.toLocaleString('es-CO')}) es menor al total ($${total.toLocaleString('es-CO')})`, 'error');
+      return;
+    }
+  }
+
   try {
     await API.confirmPayment(orderId, method);
-    // Guardar el pedido antes de limpiar el estado
-    const lastOrder = State._lastPaidOrder;
     State.selectedTable = null; State.activeOrder = null;
     closeModal('modal-pay');
     State.tables = await API.getTables();
     await loadCurrentDay();
     updateLocalBadges();
     toast('Pago confirmado — Mesa liberada', 'success');
-    // Imprimir si se seleccionó
     if ((printOpt === 'receipt' || printOpt === 'invoice') && lastOrder) {
       printDocument(lastOrder, method, printOpt);
     }
