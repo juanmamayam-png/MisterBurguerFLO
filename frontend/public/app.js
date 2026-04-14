@@ -1756,50 +1756,183 @@ function _renderDayCard(d, prods, cenaData) {
   </div>`;
 }
 
-async function renderReports(c) {
-  c.innerHTML = `<div class="ph-row"><div class="ph"><h2>Reporte Diario</h2><p>Cargando…</p></div></div>`;
-  try {
-    const days = await API.getDays();
+let _reportTab = 'daily'; // 'daily' | 'weekly' | 'monthly' | 'annual'
 
-    // Renderizar estructura base
-    c.innerHTML = `
-      <div class="ph-row">
-        <div class="ph"><h2>Reporte Diario</h2><p>Historial de jornadas · inversión, ventas y ganancias</p></div>
-        ${!State.currentDay?`<button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Nueva Jornada</button>`:''}
+function switchReportTab(tab, btn) {
+  _reportTab = tab;
+  document.querySelectorAll('.rtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const c = document.querySelector('.main-content .active-section') || document.getElementById('sec-reports');
+  if (c) renderReports(c);
+}
+
+function fmtPct(val, ref) {
+  if (!ref) return '';
+  const pct = Math.round((val - ref) / Math.abs(ref) * 100);
+  const cls = pct >= 0 ? 'color:var(--green)' : 'color:var(--red)';
+  const ico = pct >= 0 ? '▲' : '▼';
+  return `<span style="font-size:11px;${cls};margin-left:4px">${ico}${Math.abs(pct)}%</span>`;
+}
+
+function _periodMetricsHTML(p, prev) {
+  return `
+    <div class="rcard-metrics">
+      <div class="rm"><div class="rm-l">Inversión</div>
+        <div class="rm-v" style="color:var(--yellow)">${fmtCOP(p.total_investment||0)}</div></div>
+      <div class="rm"><div class="rm-l">Ventas</div>
+        <div class="rm-v" style="color:var(--acc)">${fmtCOP(p.total_sales||0)}${prev?fmtPct(p.total_sales,prev.total_sales):''}</div></div>
+      <div class="rm"><div class="rm-l">Costo prod.</div>
+        <div class="rm-v" style="color:var(--text-m)">${fmtCOP(p.total_cost||0)}</div></div>
+      <div class="rm"><div class="rm-l">Gan. bruta</div>
+        <div class="rm-v" style="color:${(p.gross_profit||0)>=0?'var(--green)':'var(--red)'}">${fmtCOP(p.gross_profit||0)}</div></div>
+      <div class="rm"><div class="rm-l">Gan. neta</div>
+        <div class="rm-v" style="color:${(p.net_profit||0)>=0?'var(--green)':'var(--red)'};font-size:24px">
+          ${fmtCOP(p.net_profit||0)}${prev?fmtPct(p.net_profit,prev.net_profit):''}
+        </div></div>
+      <div class="rm"><div class="rm-l">Pedidos</div>
+        <div class="rm-v">${p.paid_orders||p.paid_orders_count||0}${prev?fmtPct(p.paid_orders||p.paid_orders_count,prev.paid_orders||prev.paid_orders_count):''}</div></div>
+      ${p.days_count ? `<div class="rm"><div class="rm-l">Jornadas</div><div class="rm-v">${p.days_count}</div></div>` : ''}
+      ${(p.cena_gasto||0) > 0 ? `<div class="rm"><div class="rm-l">Cenas emp.</div><div class="rm-v" style="color:var(--yellow)">${fmtCOP(p.cena_gasto)}</div></div>` : ''}
+    </div>`;
+}
+
+function _topProductsHTML(prods, title) {
+  if (!prods || !prods.length) return '';
+  return `
+    <div class="rcard-prods" style="margin-top:12px">
+      <div class="rcard-prods-title">
+        <i class="fa-solid fa-trophy"></i> ${title||'Productos más vendidos'}
       </div>
-      ${days.length
-        ? `<div class="report-list" id="report-list-inner">
-            ${days.map(d => `<div id="rcard-${d.id}" class="rcard-loading">
-              <div style="padding:20px;color:var(--text-m);font-size:13px">
-                <i class="fa-solid fa-spinner fa-spin"></i> Cargando jornada ${d.date_label||''}…
-              </div></div>`).join('')}
-           </div>`
-        : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:14px;color:var(--text-m)">
-            <i class="fa-solid fa-chart-line" style="font-size:48px;color:var(--text-dim)"></i>
-            <p style="font-size:15px;font-weight:600">No hay jornadas registradas aún</p>
-            <button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Abrir Primera Jornada</button>
-           </div>`
-      }`;
+      <table class="rcard-prods-table">
+        <thead><tr>
+          <th style="text-align:left">Producto</th>
+          <th style="text-align:center">Cant.</th>
+          <th style="text-align:right">Ingresos</th>
+          <th style="text-align:right">Ganancia</th>
+        </tr></thead>
+        <tbody>
+          ${prods.map((p,i) => `
+            <tr class="${i%2===0?'':'rp-alt'}">
+              <td class="rp-name">${p.emoji||''} ${p.name||p.product_name}</td>
+              <td class="rp-qty">${p.units_sold}</td>
+              <td class="rp-rev">${fmtCOP(p.total_revenue)}</td>
+              <td class="rp-profit" style="color:${parseInt(p.total_profit)>=0?'var(--green)':'var(--red)'}">${fmtCOP(p.total_profit)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
 
-    // Cargar productos y cenas de cada jornada de forma asíncrona
-    for (const d of days) {
-      const slot = document.getElementById(`rcard-${d.id}`);
-      if (!slot) continue;
-      try {
-        const [prods, cenaData] = await Promise.all([
-          API.getDayProducts(d.id).catch(() => []),
-          API.getDayCena(d.id).catch(() => ({ cenas:[], total_gasto:0 })),
-        ]);
-        slot.outerHTML = _renderDayCard(d, prods, cenaData);
-      } catch {
-        slot.outerHTML = _renderDayCard(d, [], { cenas:[], total_gasto:0 });
-      }
+async function renderReports(c) {
+  const tabsHTML = `
+    <div class="rtabs">
+      <button class="rtab-btn ${_reportTab==='daily'  ?'active':''}" onclick="switchReportTab('daily',this)">
+        <i class="fa-solid fa-calendar-day"></i> Jornadas
+      </button>
+      <button class="rtab-btn ${_reportTab==='weekly' ?'active':''}" onclick="switchReportTab('weekly',this)">
+        <i class="fa-solid fa-calendar-week"></i> Semanal
+      </button>
+      <button class="rtab-btn ${_reportTab==='monthly'?'active':''}" onclick="switchReportTab('monthly',this)">
+        <i class="fa-solid fa-calendar-alt"></i> Mensual
+      </button>
+      <button class="rtab-btn ${_reportTab==='annual' ?'active':''}" onclick="switchReportTab('annual',this)">
+        <i class="fa-solid fa-calendar"></i> Anual
+      </button>
+    </div>`;
+
+  c.innerHTML = `
+    <div class="ph-row">
+      <div class="ph"><h2>Reporte Histórico</h2><p>Jornadas · Semanal · Mensual · Anual</p></div>
+      ${!State.currentDay?`<button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Nueva Jornada</button>`:''}
+    </div>
+    ${tabsHTML}
+    <div id="report-content" style="margin-top:16px">
+      <div style="padding:40px;text-align:center;color:var(--text-m)">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:28px"></i>
+      </div>
+    </div>`;
+
+  const rc = document.getElementById('report-content');
+  if (!rc) return;
+
+  try {
+    if (_reportTab === 'daily') {
+      await _renderDaily(rc);
+    } else if (_reportTab === 'weekly') {
+      await _renderPeriodSummary(rc, 'weekly', 'Semanal', 'Semanas');
+    } else if (_reportTab === 'monthly') {
+      await _renderPeriodSummary(rc, 'monthly', 'Mensual', 'Meses');
+    } else if (_reportTab === 'annual') {
+      await _renderPeriodSummary(rc, 'annual', 'Anual', 'Años');
     }
-
-  } catch (err) {
-    c.innerHTML += `<p style="color:var(--red);padding:16px">Error al cargar reportes: ${err.message}</p>`;
+  } catch(err) {
+    rc.innerHTML = `<p style="color:var(--red);padding:16px">Error: ${err.message}</p>`;
   }
 }
+
+async function _renderDaily(rc) {
+  const days = await API.getDays();
+  if (!days.length) {
+    rc.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:14px;color:var(--text-m)">
+      <i class="fa-solid fa-chart-line" style="font-size:48px;color:var(--text-dim)"></i>
+      <p style="font-size:15px;font-weight:600">No hay jornadas registradas aún</p>
+      <button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Abrir Primera Jornada</button>
+    </div>`;
+    return;
+  }
+  rc.innerHTML = `<div class="report-list" id="report-list-inner">
+    ${days.map(d => `<div id="rcard-${d.id}">
+      <div style="padding:20px;color:var(--text-m);font-size:13px">
+        <i class="fa-solid fa-spinner fa-spin"></i> Cargando jornada ${d.date_label||''}…
+      </div></div>`).join('')}
+  </div>`;
+  for (const d of days) {
+    const slot = document.getElementById(`rcard-${d.id}`);
+    if (!slot) continue;
+    try {
+      const [prods, cenaData] = await Promise.all([
+        API.getDayProducts(d.id).catch(() => []),
+        API.getDayCena(d.id).catch(() => ({ cenas:[], total_gasto:0 })),
+      ]);
+      slot.outerHTML = _renderDayCard(d, prods, cenaData);
+    } catch { slot.outerHTML = _renderDayCard(d, [], { cenas:[], total_gasto:0 }); }
+  }
+}
+
+async function _renderPeriodSummary(rc, type, title, unitName) {
+  let data;
+  if (type==='weekly')  data = await API.getWeeklySummary();
+  if (type==='monthly') data = await API.getMonthlySummary();
+  if (type==='annual')  data = await API.getAnnualSummary();
+
+  if (!data || !data.length) {
+    rc.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-m)">
+      <i class="fa-solid fa-chart-bar" style="font-size:48px;color:var(--text-dim);margin-bottom:16px;display:block"></i>
+      <p style="font-size:15px;font-weight:600">No hay datos suficientes para mostrar el resumen ${title.toLowerCase()}.</p>
+      <p style="font-size:13px;margin-top:8px">Se necesitan jornadas cerradas para generar estadísticas.</p>
+    </div>`;
+    return;
+  }
+
+  rc.innerHTML = `<div class="report-list">
+    ${data.map((p, idx) => {
+      const prev = data[idx+1];
+      const prodsHTML = _topProductsHTML(p.top_products, `Top productos de ${p.label}`);
+      return `<div class="rcard">
+        <div class="rcard-head">
+          <div>
+            <h4 style="font-size:18px">${p.label}</h4>
+            <span style="font-size:12px;color:var(--text-m)">${p.days_count} jornada(s) · ${p.paid_orders||p.paid_orders_count||0} pedidos</span>
+          </div>
+          ${idx===0?`<span class="badge badge-green">Más reciente</span>`:''}
+        </div>
+        ${_periodMetricsHTML(p, prev)}
+        ${prodsHTML}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 
 /* ─────────────────────────────────────────────
    KITCHEN VIEW
