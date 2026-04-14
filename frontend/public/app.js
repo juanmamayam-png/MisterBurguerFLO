@@ -1412,47 +1412,103 @@ async function promptNewUser() {
 /* ─────────────────────────────────────────────
    REPORTS
 ───────────────────────────────────────────── */
-async function renderReports(c) {
-  c.innerHTML = `<div class="ph-row">
-    <div class="ph"><h2>Reporte Diario</h2><p>Cargando…</p></div>
+// ── Helper: render una tarjeta de jornada con productos ──────────
+function _renderDayCard(d, prods) {
+  const net = d.net_profit || 0;
+  const prodsHTML = prods && prods.length ? `
+    <div class="rcard-prods">
+      <div class="rcard-prods-title">
+        <i class="fa-solid fa-chart-bar"></i> Productos vendidos en esta jornada
+      </div>
+      <table class="rcard-prods-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Producto</th>
+            <th style="text-align:left">Categoría</th>
+            <th style="text-align:center">Cant. vendida</th>
+            <th style="text-align:right">Ingresos</th>
+            <th style="text-align:right">Ganancia</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${prods.map((p,i) => `
+            <tr class="${i%2===0?'':'rp-alt'}">
+              <td class="rp-name">${p.emoji||''} ${p.product_name}</td>
+              <td class="rp-cat">${p.category}</td>
+              <td class="rp-qty">${p.units_sold}</td>
+              <td class="rp-rev">${fmtCOP(p.total_revenue)}</td>
+              <td class="rp-profit" style="color:${parseInt(p.total_profit)>=0?'var(--green)':'var(--red)'}">${fmtCOP(p.total_profit)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
+
+  return `<div class="rcard">
+    <div class="rcard-head">
+      <div>
+        <h4>${d.date_label||fmtDate(d.opened_at)}</h4>
+        <span style="font-size:12px;color:var(--text-m)">Apertura: ${fmtTime(d.opened_at)}${d.closed_at?` · Cierre: ${fmtTime(d.closed_at)}`:''}</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge ${d.status==='open'?'badge-green':'badge-acc'}">${d.status==='open'?'🟢 Abierta':'🔒 Cerrada'}</span>
+        ${d.status==='open'?`<button class="pill-btn pill-btn--sm pill-btn--danger" onclick="openCloseDayModal()"><i class="fa-solid fa-lock"></i> Cerrar</button>`:''}
+      </div>
+    </div>
+    <div class="rcard-metrics">
+      <div class="rm"><div class="rm-l">Inversión</div><div class="rm-v" style="color:var(--yellow)">${fmtCOP(d.total_investment||0)}</div></div>
+      <div class="rm"><div class="rm-l">Ventas</div><div class="rm-v" style="color:var(--acc)">${fmtCOP(d.total_sales||0)}</div></div>
+      <div class="rm"><div class="rm-l">Costo prod.</div><div class="rm-v" style="color:var(--text-m)">${fmtCOP(d.total_cost||0)}</div></div>
+      <div class="rm"><div class="rm-l">Gan. bruta</div><div class="rm-v" style="color:${(d.gross_profit||0)>=0?'var(--green)':'var(--red)'}">${fmtCOP(d.gross_profit||0)}</div></div>
+      <div class="rm"><div class="rm-l">Gan. neta</div><div class="rm-v" style="color:${net>=0?'var(--green)':'var(--red)'}; font-size:24px">${fmtCOP(net)}</div></div>
+      <div class="rm"><div class="rm-l">Pedidos</div><div class="rm-v">${d.paid_orders_count||0}</div></div>
+    </div>
+    ${d.investments?.length?`<div class="rcard-inv"><h5><i class="fa-solid fa-boxes-stacking"></i> Inversiones</h5>
+      ${d.investments.map(i=>`<div class="ri"><span>${i.description}</span><span style="color:var(--yellow);font-family:'DM Mono',monospace">${fmtCOP(i.amount)}</span></div>`).join('')}
+    </div>`:''}
+    ${prodsHTML}
   </div>`;
+}
+
+async function renderReports(c) {
+  c.innerHTML = `<div class="ph-row"><div class="ph"><h2>Reporte Diario</h2><p>Cargando…</p></div></div>`;
   try {
     const days = await API.getDays();
-    c.innerHTML = `<div class="ph-row">
-      <div class="ph"><h2>Reporte Diario</h2><p>Historial de jornadas · inversión, ventas y ganancias</p></div>
-      ${!State.currentDay?`<button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Nueva Jornada</button>`:''}
-    </div>
-    ${days.length ? `<div class="report-list">${days.map(d => {
-      const net = d.net_profit || 0;
-      return `<div class="rcard">
-        <div class="rcard-head">
-          <div><h4>${d.date_label||fmtDate(d.opened_at)}</h4>
-            <span style="font-size:12px;color:var(--text-m)">Apertura: ${fmtTime(d.opened_at)}${d.closed_at?` · Cierre: ${fmtTime(d.closed_at)}`:''}</span>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span class="badge ${d.status==='open'?'badge-green':'badge-acc'}">${d.status==='open'?'🟢 Abierta':'🔒 Cerrada'}</span>
-            ${d.status==='open'?`<button class="pill-btn pill-btn--sm pill-btn--danger" onclick="openCloseDayModal()"><i class="fa-solid fa-lock"></i> Cerrar</button>`:''}
-          </div>
-        </div>
-        <div class="rcard-metrics">
-          <div class="rm"><div class="rm-l">Inversión</div><div class="rm-v" style="color:var(--yellow)">${fmtCOP(d.total_investment||0)}</div></div>
-          <div class="rm"><div class="rm-l">Ventas</div><div class="rm-v" style="color:var(--acc)">${fmtCOP(d.total_sales||0)}</div></div>
-          <div class="rm"><div class="rm-l">Costo prod.</div><div class="rm-v" style="color:var(--text-m)">${fmtCOP(d.total_cost||0)}</div></div>
-          <div class="rm"><div class="rm-l">Gan. bruta</div><div class="rm-v" style="color:${(d.gross_profit||0)>=0?'var(--green)':'var(--red)'}">${fmtCOP(d.gross_profit||0)}</div></div>
-          <div class="rm"><div class="rm-l">Gan. neta</div><div class="rm-v" style="color:${net>=0?'var(--green)':'var(--red)'}; font-size:24px">${fmtCOP(net)}</div></div>
-          <div class="rm"><div class="rm-l">Pedidos</div><div class="rm-v">${d.paid_orders_count||0}</div></div>
-        </div>
-        ${d.investments?.length?`<div class="rcard-inv"><h5><i class="fa-solid fa-boxes-stacking"></i> Inversiones</h5>
-          ${d.investments.map(i=>`<div class="ri"><span>${i.description}</span><span style="color:var(--yellow);font-family:'DM Mono',monospace">${fmtCOP(i.amount)}</span></div>`).join('')}
-        </div>`:''}
-      </div>`;
-    }).join('')}</div>` :
-    `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:14px;color:var(--text-m)">
-      <i class="fa-solid fa-chart-line" style="font-size:48px;color:var(--text-dim)"></i>
-      <p style="font-size:15px;font-weight:600">No hay jornadas registradas aún</p>
-      <button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Abrir Primera Jornada</button>
-    </div>`}`;
-  } catch (err) { c.innerHTML += `<p style="color:var(--red)">Error: ${err.message}</p>`; }
+
+    // Renderizar estructura base
+    c.innerHTML = `
+      <div class="ph-row">
+        <div class="ph"><h2>Reporte Diario</h2><p>Historial de jornadas · inversión, ventas y ganancias</p></div>
+        ${!State.currentDay?`<button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Nueva Jornada</button>`:''}
+      </div>
+      ${days.length
+        ? `<div class="report-list" id="report-list-inner">
+            ${days.map(d => `<div id="rcard-${d.id}" class="rcard-loading">
+              <div style="padding:20px;color:var(--text-m);font-size:13px">
+                <i class="fa-solid fa-spinner fa-spin"></i> Cargando jornada ${d.date_label||''}…
+              </div></div>`).join('')}
+           </div>`
+        : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:14px;color:var(--text-m)">
+            <i class="fa-solid fa-chart-line" style="font-size:48px;color:var(--text-dim)"></i>
+            <p style="font-size:15px;font-weight:600">No hay jornadas registradas aún</p>
+            <button class="pill-btn pill-btn--green" onclick="openOpenModal()"><i class="fa-solid fa-store"></i> Abrir Primera Jornada</button>
+           </div>`
+      }`;
+
+    // Cargar productos de cada jornada de forma asíncrona y renderizar una a una
+    for (const d of days) {
+      const slot = document.getElementById(`rcard-${d.id}`);
+      if (!slot) continue;
+      try {
+        const prods = await API.getDayProducts(d.id).catch(() => []);
+        slot.outerHTML = _renderDayCard(d, prods);
+      } catch {
+        slot.outerHTML = _renderDayCard(d, []);
+      }
+    }
+
+  } catch (err) {
+    c.innerHTML += `<p style="color:var(--red);padding:16px">Error al cargar reportes: ${err.message}</p>`;
+  }
 }
 
 /* ─────────────────────────────────────────────
