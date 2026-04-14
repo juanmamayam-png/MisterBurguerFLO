@@ -4,7 +4,7 @@
 // ── Helpers ──────────────────────────────────────────────────────
 const VALID_ROLES      = ['boss', 'waiter', 'kitchen'];
 const VALID_STATUSES   = ['active', 'inactive'];
-const VALID_PAY_METHODS= ['efectivo', 'nequi', 'bancolombia', 'tarjeta'];
+const VALID_PAY_METHODS= ['efectivo', 'nequi', 'bancolombia', 'tarjeta', 'cena_empleados'];
 const VALID_CATEGORIES = ['Hamburguesas', 'Especiales', 'Hot Dog', 'Bebidas', 'Infantil', 'Entradas'];
 const VALID_TABLE_ST   = ['free', 'occupied', 'pending'];
 const VALID_ITEM_ST    = ['active', 'cancelled'];
