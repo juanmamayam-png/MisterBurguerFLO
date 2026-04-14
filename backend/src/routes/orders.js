@@ -41,7 +41,7 @@ router.get('/', auth, async (req, res) => {
     if (status) sql += ` AND o.status=$${p.push(status)}`;
     if (day_id) sql += ` AND o.day_id=$${p.push(parseInt(day_id))}`;
     if (req.user.role==='waiter') sql += ` AND o.waiter_id=$${p.push(req.user.id)}`;
-    sql += ' GROUP BY o.id,t.number,t.floor,t.table_type,u.name ORDER BY o.created_at DESC LIMIT 500';
+    sql += ' GROUP BY o.id,t.number,t.floor,t.table_type,u.name,o.employee_name ORDER BY o.created_at DESC LIMIT 500';
     res.json((await query(sql,p)).rows);
   } catch(err){ console.error('[Orders GET /]',err.message); res.status(500).json({error:'Error al obtener pedidos'}); }
 });
@@ -50,7 +50,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/kitchen', auth, requireRole('kitchen','boss'), async (req,res) => {
   try {
     const r = await query(`
-      SELECT o.id, o.status, o.created_at,
+      SELECT o.id, o.status, o.created_at, o.employee_name,
              t.number AS table_number, t.floor AS table_floor, t.table_type,
         COALESCE(json_agg(json_build_object(
           'id',oi.id,'product_id',oi.product_id,'product_name',p.name,'emoji',p.emoji,
@@ -60,7 +60,7 @@ router.get('/kitchen', auth, requireRole('kitchen','boss'), async (req,res) => {
       FROM orders o JOIN tables t ON t.id=o.table_id
       LEFT JOIN order_items oi ON oi.order_id=o.id AND oi.status='active'
       LEFT JOIN products p ON p.id=oi.product_id
-      WHERE o.status IN ('active','pending') GROUP BY o.id,t.number,t.floor,t.table_type ORDER BY o.created_at ASC`);
+      WHERE o.status IN ('active','pending') GROUP BY o.id,t.number,t.floor,t.table_type,o.employee_name ORDER BY o.created_at ASC`);
     res.json(r.rows);
   } catch(err){ console.error('[Orders GET /kitchen]',err.message); res.status(500).json({error:'Error cocina'}); }
 });
@@ -216,15 +216,30 @@ router.patch('/:id/pay', auth, requireRole('boss'), validId, validators.confirmP
     const cost   = parseInt(totRes.rows[0].cost);
     const profit = total - cost;
     if (total<=0) return await rollbackRes(client,res,409,'El pedido no tiene ítems activos para cobrar');
-    if (total<1000) return await rollbackRes(client,res,409,`El total ($${total.toLocaleString('es-CO')}) es menor al mínimo permitido`);
+    // No aplicar mínimo para cena de empleados
+    const tableTypeRes2 = await client.query('SELECT table_type FROM tables WHERE id=(SELECT table_id FROM orders WHERE id=$1)',[order_id]);
+    const isEmp = tableTypeRes2.rows[0]?.table_type === 'cena_empleados';
+    if (!isEmp && total<1000) return await rollbackRes(client,res,409,`El total ($${total.toLocaleString('es-CO')}) es menor al mínimo permitido`);
     await client.query(`UPDATE orders SET status='paid',pay_method=$1,total_paid=$2,paid_at=NOW() WHERE id=$3`,[pay_method,total,order_id]);
     // Liberar mesa de forma segura (puede ya estar libre si hubo un error previo)
     await client.query(`UPDATE tables SET status='free' WHERE id=$1`,[order.table_id]);
     if (order.day_id) {
-      await client.query(
-        `INSERT INTO transactions (day_id,order_id,type,amount,cost,profit,method,description)
-         VALUES ($1,$2,'income',$3,$4,$5,$6,$7)`,
-        [order.day_id,order_id,total,cost,profit,pay_method,`Pedido #${order_id}`]);
+      // Cena Empleados: gasto de la empresa (expense), no ingreso
+      const tableRes = await client.query('SELECT table_type FROM tables WHERE id=$1',[order.table_id]);
+      const isCena   = tableRes.rows[0]?.table_type === 'cena_empleados';
+      if (isCena) {
+        // Registrar como GASTO — resta de la ganancia
+        await client.query(
+          `INSERT INTO transactions (day_id,order_id,type,amount,cost,profit,method,description)
+           VALUES ($1,$2,'expense',$3,0,0,'cena_empleados',$4)`,
+          [order.day_id, order_id, total,
+           `Cena empleado${order.employee_name?' — '+order.employee_name:''}`]);
+      } else {
+        await client.query(
+          `INSERT INTO transactions (day_id,order_id,type,amount,cost,profit,method,description)
+           VALUES ($1,$2,'income',$3,$4,$5,$6,$7)`,
+          [order.day_id,order_id,total,cost,profit,pay_method,`Pedido #${order_id}`]);
+      }
     }
     await client.query('COMMIT');
     res.json({message:'Pago confirmado y mesa liberada',total,cost,profit,pay_method});
