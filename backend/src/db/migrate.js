@@ -206,7 +206,15 @@ async function migrate() {
   try {
     console.log('[Migrate] Ejecutando migraciones…');
     await client.query(SQL);
-    console.log('[Migrate] ✅ Tablas creadas/actualizadas correctamente');
+    // Insertar mesa CENA EMPLEADOS si no existe
+  await pool.query(`
+    INSERT INTO tables (number, floor, table_type, status)
+    VALUES (1, 1, 'cena_empleados', 'free')
+    ON CONFLICT (number, floor, table_type) DO NOTHING
+  `);
+  console.log('[Migrate] ✅ Mesa Cena Empleados verificada');
+
+  console.log('[Migrate] ✅ Tablas creadas/actualizadas correctamente');
   } catch (err) {
     console.error('[Migrate] ❌ Error:', err.message);
     process.exit(1);
