@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS tables (
   number      INTEGER      NOT NULL,
   floor       INTEGER      NOT NULL DEFAULT 1,
   table_type  VARCHAR(20)  NOT NULL DEFAULT 'mesa'
-                CHECK (table_type IN ('mesa','domicilio','para_llevar')),
+                CHECK (table_type IN ('mesa','domicilio','para_llevar','cena_empleados')),
   status      VARCHAR(30)  NOT NULL DEFAULT 'free'
                 CHECK (status IN ('free','occupied','pending')),
   UNIQUE (number, floor, table_type)
@@ -66,9 +66,20 @@ DO $$ BEGIN
     SELECT 1 FROM pg_constraint WHERE conname = 'tables_table_type_check'
   ) THEN
     ALTER TABLE tables ADD CONSTRAINT tables_table_type_check
-      CHECK (table_type IN ('mesa','domicilio','para_llevar'));
+      CHECK (table_type IN ('mesa','domicilio','para_llevar','cena_empleados'));
   END IF;
 END $$;
+
+-- Migración: actualizar constraint de table_type para incluir 'cena_empleados'
+DO $$ BEGIN
+  BEGIN
+    ALTER TABLE tables DROP CONSTRAINT IF EXISTS tables_table_type_check;
+    ALTER TABLE tables ADD CONSTRAINT tables_table_type_check
+      CHECK (table_type IN ('mesa','domicilio','para_llevar','cena_empleados'));
+  EXCEPTION WHEN others THEN NULL;
+  END;
+END $$;
+
 -- Paso 5: reemplazar constraint UNIQUE (number, floor) → (number, floor, table_type)
 -- Primero eliminar la constraint vieja si existe
 DO $$ BEGIN
@@ -134,6 +145,16 @@ CREATE TABLE IF NOT EXISTS order_items (
   bread_type  VARCHAR(20)  DEFAULT NULL CHECK (bread_type IN ('pan','platano') OR bread_type IS NULL),
   status      VARCHAR(20)  NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled'))
 );
+
+-- Migración segura: agregar employee_name a orders
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='orders' AND column_name='employee_name'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN employee_name VARCHAR(100) DEFAULT NULL;
+  END IF;
+END $$;
 
 -- Migración segura: agregar columna bread_type si no existe
 DO $$ BEGIN
