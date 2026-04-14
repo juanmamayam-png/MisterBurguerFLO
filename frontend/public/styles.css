@@ -1116,3 +1116,121 @@ h1,h2,h3,h4{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
   background: rgba(62,184,122,.06) !important;
   border-color: rgba(62,184,122,.18) !important;
 }
+
+/* ── Opciones de impresión en modal de pago ── */
+.print-opt-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-m);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.print-opt-btn i { font-size: 18px; }
+.print-opt-btn:hover { border-color: var(--border-l); color: var(--text); }
+.print-opt-btn.active {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--bg);
+}
+
+/* ═══════════════════════════════════════════════
+   REPORTE DIARIO — Tabla de productos por jornada
+═══════════════════════════════════════════════ */
+.rcard-prods {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.rcard-prods-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-m);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rcard-prods-title i { color: var(--acc); }
+.rcard-prods-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rcard-prods-table thead tr {
+  background: var(--bg-2);
+}
+.rcard-prods-table th {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: var(--text-m);
+  border-bottom: 1px solid var(--border);
+}
+.rcard-prods-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  color: var(--text);
+}
+.rcard-prods-table .rp-alt td { background: rgba(255,255,255,.02); }
+.rcard-prods-table .rp-name { font-weight: 600; }
+.rcard-prods-table .rp-cat  { color: var(--text-m); font-size: 11px; }
+.rcard-prods-table .rp-qty  {
+  text-align: center;
+  font-weight: 900;
+  font-size: 15px;
+  color: var(--acc);
+}
+.rcard-prods-table .rp-rev  {
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+.rcard-prods-table .rp-profit {
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Print options en modal de pago ── */
+.print-opt-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-m);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+}
+.print-opt-btn i { font-size: 18px; }
+.print-opt-btn:hover {
+  border-color: var(--border-l);
+  color: var(--text);
+  background: var(--bg-3);
+}
+.print-opt-btn.active {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--bg);
+}
