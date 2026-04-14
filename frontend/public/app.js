@@ -195,7 +195,8 @@ async function doLogin() {
 function logout() {
   API.logout();
   State.user = null; State.selectedTable = null; State.activeOrder = null;
-  if (State.kitchTimer)  { clearInterval(State.kitchTimer);  State.kitchTimer  = null; }
+  if (State.kitchTimer)      { clearInterval(State.kitchTimer);      State.kitchTimer      = null; }
+  if (State.kitchClockTimer) { clearInterval(State.kitchClockTimer); State.kitchClockTimer = null; }
   if (_statusPollTimer)  { clearInterval(_statusPollTimer);  _statusPollTimer  = null; }
   if (_clientPollTimer)  { clearInterval(_clientPollTimer);  _clientPollTimer  = null; }
   if (_heartbeatTimer)   { clearInterval(_heartbeatTimer);   _heartbeatTimer   = null; }
@@ -1777,6 +1778,19 @@ function bootKitchen() {
   kitchCheckStatus().then(() => updateLocalBadges());
 
   renderKitchen();
+
+  // Timer independiente cada 30 segundos para actualizar solo los contadores de tiempo
+  // sin volver a llamar al servidor
+  if (State.kitchClockTimer) clearInterval(State.kitchClockTimer);
+  State.kitchClockTimer = setInterval(() => {
+    document.querySelectorAll('.ko-timer[data-ts]').forEach(el => {
+      const iso = el.dataset.ts;
+      if (!iso) return;
+      el.textContent = elapsedStr(iso);
+      el.className = `ko-timer ${timerClass(iso)}`;
+    });
+  }, 30000); // actualizar cada 30 segundos
+
   if (State.kitchTimer) clearInterval(State.kitchTimer);
 
   // Timer de pedidos (cada 8s) — independiente del estado del local
@@ -1878,7 +1892,7 @@ function _renderKitchenOrders(orders) {
           <h4>${tIcon} ${tLabel}</h4>
           <div class="ko-meta">Pedido #${o.id} · ${fmtTime(o.created_at)}${o.status==='pending'?' · <span style="color:var(--yellow)">Listo para cobrar</span>':''}</div>
         </div>
-        <div class="ko-timer ${timerClass(o.created_at)}">${elapsedStr(o.created_at)}</div>
+        <div class="ko-timer ${timerClass(o.created_at)}" data-ts="${o.created_at}">${elapsedStr(o.created_at)}</div>
       </div>
       <div class="ko-items">${foodHtml}${divider}${drinkHtml}</div>
     </div>`;
