@@ -373,6 +373,7 @@ const API = {
   openDay(investments, open_notes){ return post('/days', { investments, open_notes }); },
   closeDay(id, close_notes)       { return patch(`/days/${id}/close`, { close_notes }); },
   getDayProducts(id)              { return get(`/days/${id}/products`); },
+  getDayCena(id)                  { return get(`/days/${id}/cena`); },
 
   // USERS
   getUsers()               { return get('/users'); },
