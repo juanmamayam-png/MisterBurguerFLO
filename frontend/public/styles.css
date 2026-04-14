@@ -1234,3 +1234,52 @@ h1,h2,h3,h4{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
   border-color: var(--acc);
   color: var(--bg);
 }
+
+/* ── Modal pago — fila de botones de impresión ── */
+.print-opts-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.print-opts-row .print-opt-btn {
+  flex: 1;
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-m);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.print-opts-row .print-opt-btn i { font-size: 20px; }
+.print-opts-row .print-opt-btn span { font-size: 11px; }
+.print-opts-row .print-opt-btn:hover {
+  border-color: var(--border-l);
+  background: var(--bg-3);
+  color: var(--text);
+}
+.print-opts-row .print-opt-btn.active {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--bg);
+}
+
+/* ── Alerta de falta de dinero ── */
+.pay-short {
+  background: rgba(232,67,26,.12);
+  border: 1px solid rgba(232,67,26,.3);
+  border-radius: 8px;
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+  text-align: center;
+  margin-top: 8px;
+}
