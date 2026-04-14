@@ -484,6 +484,8 @@ function tableTypeTabs(ctx) {
     mesa: State.tables.filter(t=>t.table_type==='mesa').length,
     domicilio: 100, para_llevar: 100,
   };
+  const cenaOcup  = State.tables.filter(t=>t.table_type==='cena_empleados'&&t.status!=='free').length;
+  const cenaTotal = State.tables.filter(t=>t.table_type==='cena_empleados').length;
   return `<div class="floor-tabs" style="flex-wrap:wrap">
     <button class="ft ${State.tableType==='mesa'?'active':''}" onclick="switchTableType('mesa','${ctx}')">
       🪑 Mesas <span class="fc">${c.mesa}/${total.mesa}</span>
@@ -494,6 +496,9 @@ function tableTypeTabs(ctx) {
     <button class="ft ${State.tableType==='para_llevar'?'active':''}" onclick="switchTableType('para_llevar','${ctx}')">
       🥡 Para llevar <span class="fc">${c.para_llevar}/100</span>
     </button>
+    ${cenaTotal > 0 ? `<button class="ft ${State.tableType==='cena_empleados'?'active':''}" onclick="switchTableType('cena_empleados','${ctx}')">
+      🍽️ Cena Empleados <span class="fc">${cenaOcup}/${cenaTotal}</span>
+    </button>` : ''}
   </div>
   ${State.tableType==='mesa' ? `<div class="floor-tabs" style="margin-top:6px">
     <button class="ft ${State.floor===1?'active':''}" onclick="switchFloor(1,'${ctx}')"><i class="fa-solid fa-1"></i>Piso 1</button>
@@ -539,14 +544,14 @@ async function renderTables(c) {
     <div class="tables-order-layout">
       <div class="tables-panel">
         ${tableTypeTabs('tables')}
-        <div class="floor-label"><h3>${TABLE_TYPE_ICONS[State.tableType]||'🪑'} ${State.tableType==='mesa'?`Piso ${State.floor}`:TABLE_TYPE_LABELS[State.tableType]||State.tableType}</h3></div>
+        <div class="floor-label"><h3>${TABLE_TYPE_ICONS[State.tableType]||'🍽️'} ${State.tableType==='mesa'?`Piso ${State.floor}`:State.tableType==='cena_empleados'?'Cena Empleados':TABLE_TYPE_LABELS[State.tableType]||State.tableType}</h3></div>
         <div class="tables-grid" id="tables-grid">
           ${flTables.map(t => {
             const mine = myTids.includes(t.id);
             const st   = {free:'Libre',occupied:mine&&!isBoss?'Mi pedido':'Ocupada',pending:'Cobro pend.'}[t.status]||t.status;
             return `<div class="table-card ${t.status} ${State.selectedTable===t.id?'selected':''}" data-tid="${t.id}" onclick="pickTable(${t.id})">
               <div class="tc-icon">${{free:'🟢',occupied:'🍽️',pending:'💛'}[t.status]||'⚪'}</div>
-              <div class="tc-num" style="font-size:${t.table_type!=='mesa'?'14px':'24px'};line-height:1.2">${t.table_type==='mesa'?t.number:(TABLE_TYPE_LABELS[t.table_type]||t.table_type)+' '+t.number}</div>
+              <div class="tc-num" style="font-size:${t.table_type==='mesa'?'24px':t.table_type==='cena_empleados'?'12px':'14px'};line-height:1.2">${t.table_type==='mesa'?t.number:t.table_type==='cena_empleados'?'CENA':(TABLE_TYPE_LABELS[t.table_type]||t.table_type)+' '+t.number}</div>
               <div class="tc-status">${st}</div>
               ${t.order_total > 0 ? `<div class="tc-total">${fmtCOP(t.order_total)}</div>` : ''}
             </div>`;
