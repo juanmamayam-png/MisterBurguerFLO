@@ -135,4 +135,66 @@ router.patch('/:id/close', auth, requireRole('boss'), validId, validators.closeD
   } catch(err){ console.error('[Days PATCH /close]',err.message); res.status(500).json({error:'Error al cerrar jornada'}); }
 });
 
+
+// GET /api/days/:id/products — ventas por producto en la jornada (solo boss)
+router.get('/:id/products', auth, requireRole('boss'), validId, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const r = await query(`
+      SELECT
+        p.id           AS product_id,
+        p.name         AS product_name,
+        p.category,
+        p.emoji,
+        SUM(oi.quantity)                       AS units_sold,
+        SUM(oi.quantity * oi.unit_price)       AS total_revenue,
+        SUM(oi.quantity * oi.unit_cost)        AS total_cost,
+        SUM(oi.quantity * (oi.unit_price - oi.unit_cost)) AS total_profit
+      FROM order_items oi
+      JOIN products p  ON p.id  = oi.product_id
+      JOIN orders   o  ON o.id  = oi.order_id
+      WHERE o.day_id = $1
+        AND o.status  = 'paid'
+        AND oi.status = 'active'
+      GROUP BY p.id, p.name, p.category, p.emoji
+      ORDER BY units_sold DESC, total_revenue DESC
+    `, [id]);
+    res.json(r.rows);
+  } catch(err) {
+    console.error('[Days GET /:id/products]', err.message);
+    res.status(500).json({ error: 'Error al obtener ventas por producto' });
+  }
+});
+
+// GET /api/days/:id/cena — resumen de cenas de empleados de la jornada
+router.get('/:id/cena', auth, requireRole('boss'), validId, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const r = await query(`
+      SELECT
+        o.id           AS order_id,
+        o.employee_name,
+        o.paid_at,
+        COALESCE(SUM(oi.quantity * oi.unit_price),0) AS total,
+        COALESCE(json_agg(json_build_object(
+          'name', p.name, 'qty', oi.quantity, 'price', oi.unit_price
+        ) ORDER BY oi.id) FILTER (WHERE oi.id IS NOT NULL), '[]') AS items
+      FROM orders o
+      JOIN tables t    ON t.id  = o.table_id
+      LEFT JOIN order_items oi ON oi.order_id = o.id AND oi.status = 'active'
+      LEFT JOIN products p     ON p.id = oi.product_id
+      WHERE o.day_id = $1
+        AND t.table_type = 'cena_empleados'
+        AND o.status = 'paid'
+      GROUP BY o.id, o.employee_name, o.paid_at
+      ORDER BY o.paid_at ASC
+    `, [id]);
+    const totalGasto = r.rows.reduce((s,x) => s + parseInt(x.total), 0);
+    res.json({ cenas: r.rows, total_gasto: totalGasto });
+  } catch(err) {
+    console.error('[Days GET /:id/cena]', err.message);
+    res.status(500).json({ error: 'Error al obtener cenas' });
+  }
+});
+
 module.exports = router;
