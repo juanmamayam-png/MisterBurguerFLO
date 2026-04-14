@@ -147,10 +147,13 @@ function _startStatusPoll() {
     if (!State.user || State.user.role === 'boss') return; // El jefe no necesita polling
     try {
       const prevOpen = !!State.currentDay;
-      await loadCurrentDay();
-      const nowOpen  = !!State.currentDay;
-      // Si el estado cambió, actualizar la UI
+      // Usar endpoint público para detectar cambios (no reemplaza datos completos)
+      const sr = await fetch('/api/days/status', { cache:'no-store' }).catch(()=>null);
+      const ss = sr && sr.ok ? await sr.json().catch(()=>({})) : {};
+      const nowOpen = !!ss.open;
       if (prevOpen !== nowOpen) {
+        // Hubo un cambio — cargar datos completos con auth
+        await loadCurrentDay();
         updateLocalBadges();
         renderStaffNav();
         if (nowOpen) {
@@ -1116,6 +1119,15 @@ async function confirmOpen() {
 async function openCloseDayModal() {
   if (!State.currentDay) return;
   try {
+    // Asegurarse de tener la jornada completa con id (no solo el status público)
+    if (!State.currentDay.id) {
+      await loadCurrentDay();
+    }
+    if (!State.currentDay || !State.currentDay.id) {
+      toast('No se pudo obtener la información de la jornada actual','error');
+      return;
+    }
+
     const [activeOrders, pendingOrders] = await Promise.all([
       API.getOrders({ status:'active' }),
       API.getOrders({ status:'pending' }),
