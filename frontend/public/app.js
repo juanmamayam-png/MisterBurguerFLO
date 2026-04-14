@@ -639,10 +639,16 @@ function renderOrderPanelHTML(table, order, isBoss) {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${!order ? `<button class="pill-btn pill-btn--green pill-btn--sm" onclick="createOrder(${table.id})"><i class="fa-solid fa-plus"></i> Nuevo</button>` : ''}
-        ${isBoss&&order ? `<button class="pill-btn pill-btn--sm" style="background:var(--blue);border-color:var(--blue);color:#fff" onclick="openMoveModal()"><i class="fa-solid fa-arrows-alt"></i></button>` : ''}
-        ${order&&!isPending ? `<button class="pill-btn pill-btn--danger pill-btn--sm" onclick="doRequestPay(${order.id})"><i class="fa-solid fa-money-bill-wave"></i> Cobrar</button>` : ''}
-        ${isBoss&&isPending ? `<button class="pill-btn pill-btn--green pill-btn--sm" onclick="openPayModal(${order.id})"><i class="fa-solid fa-circle-check"></i> Pagar</button>` : ''}
-        ${isBoss&&order ? `<button class="pill-btn pill-btn--sm pill-btn--danger" style="opacity:.7" onclick="cancelOrderAndFree(${order.id},${table.id})" title="Cancelar pedido y liberar mesa"><i class="fa-solid fa-ban"></i> Liberar</button>` : ''}
+        ${table.table_type==='cena_empleados' ? `
+          ${order&&!isPending ? `<button class="pill-btn pill-btn--green pill-btn--sm" onclick="registrarCena(${order.id})"><i class="fa-solid fa-utensils"></i> Registrar y Liberar</button>` : ''}
+          ${isBoss&&isPending ? `<button class="pill-btn pill-btn--green pill-btn--sm" onclick="registrarCena(${order.id})"><i class="fa-solid fa-utensils"></i> Registrar y Liberar</button>` : ''}
+          ${isBoss&&order ? `<button class="pill-btn pill-btn--sm pill-btn--danger" style="opacity:.7" onclick="cancelOrderAndFree(${order.id},${table.id})"><i class="fa-solid fa-ban"></i> Liberar</button>` : ''}
+        ` : `
+          ${isBoss&&order ? `<button class="pill-btn pill-btn--sm" style="background:var(--blue);border-color:var(--blue);color:#fff" onclick="openMoveModal()"><i class="fa-solid fa-arrows-alt"></i></button>` : ''}
+          ${order&&!isPending ? `<button class="pill-btn pill-btn--danger pill-btn--sm" onclick="doRequestPay(${order.id})"><i class="fa-solid fa-money-bill-wave"></i> Cobrar</button>` : ''}
+          ${isBoss&&isPending ? `<button class="pill-btn pill-btn--green pill-btn--sm" onclick="openPayModal(${order.id})"><i class="fa-solid fa-circle-check"></i> Pagar</button>` : ''}
+          ${isBoss&&order ? `<button class="pill-btn pill-btn--sm pill-btn--danger" style="opacity:.7" onclick="cancelOrderAndFree(${order.id},${table.id})" title="Cancelar pedido y liberar mesa"><i class="fa-solid fa-ban"></i> Liberar</button>` : ''}
+        `}
       </div>
     </div>
     ${order && !isPending ? `
@@ -1073,6 +1079,30 @@ async function confirmPay() {
     }
     staffSection('tables');
   } catch (err) { toast(err.message,'error'); }
+}
+
+// Registrar cena de empleado y liberar la mesa — flujo directo sin modal de pago
+async function registrarCena(orderId) {
+  if (!confirm('¿Registrar la cena como gasto de empresa y liberar la mesa?')) return;
+  try {
+    // Primero asegurarse de que el pedido esté en estado 'pending'
+    const order = await API.getOrder(orderId);
+    if (order.status === 'active') {
+      // Solicitar cobro primero
+      await API.requestPayment(orderId);
+    }
+    // Confirmar pago como 'cena_empleados' (el backend lo registra como gasto)
+    await API.confirmPayment(orderId, 'cena_empleados');
+    State.selectedTable = null;
+    State.activeOrder   = null;
+    State.tables = await API.getTables();
+    await loadCurrentDay();
+    updateLocalBadges();
+    toast('✅ Cena registrada y mesa liberada', 'success');
+    staffSection('tables');
+  } catch (err) {
+    toast(err.message || 'Error al registrar cena', 'error');
+  }
 }
 
 /* ─────────────────────────────────────────────
