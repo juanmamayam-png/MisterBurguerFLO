@@ -877,21 +877,51 @@ async function doReviveItem(orderId, itemId) {
 async function openPayModal(orderId) {
   try {
     const order = await API.getOrder(orderId);
-    const total = orderTotal(order.items);
-    $('pay-sum').innerHTML = `
-      <div class="pt-title">${order.table_type==='mesa'?`Mesa ${order.table_number} · Piso ${order.table_floor}`:order.table_type==='domicilio'?`Domicilio ${order.table_number}`:`Para llevar ${order.table_number}`} · Pedido #${orderId}</div>
-      ${order.items.map(i => `<div class="pi ${i.status==='cancelled'?'cancelled':''}"><span>${i.emoji||''} ${i.product_name}${i.bread_type?` (${i.bread_type==='platano'?'🍌 plátano':'🍞 pan'})`:''} ×${i.quantity}</span><span>${fmtCOP(i.unit_price*i.quantity)}</span></div>`).join('')}
+    if (!order) { toast('No se pudo cargar el pedido','error'); return; }
+
+    // Asegurar que items existe
+    const items = order.items || [];
+    const total = orderTotal(items);
+
+    const tableName = order.table_type === 'mesa'
+      ? `Mesa ${order.table_number} · Piso ${order.table_floor}`
+      : order.table_type === 'domicilio'
+      ? `Domicilio ${order.table_number}`
+      : `Para llevar ${order.table_number}`;
+
+    const paySumEl = $('pay-sum');
+    if (!paySumEl) { toast('Error: modal de pago no encontrado','error'); return; }
+
+    paySumEl.innerHTML = `
+      <div class="pt-title">${tableName} · Pedido #${orderId}</div>
+      ${items.map(i => `
+        <div class="pi ${i.status==='cancelled'?'cancelled':''}">
+          <span>${i.emoji||''} ${i.product_name}${i.bread_type?` (${i.bread_type==='platano'?'🍌 plátano':'🍞 pan'})`:''} ×${i.quantity}</span>
+          <span>${fmtCOP(i.unit_price*i.quantity)}</span>
+        </div>`).join('')}
       <div class="ptotal"><span>TOTAL</span><span>${fmtCOP(total)}</span></div>`;
-    $('pay-recv').value = ''; $('pay-change').classList.add('hidden');
-    $('pay-meth').value = 'efectivo'; $('pay-oid').value = orderId;
-    $('pay-print-opt').value = 'none';
+
+    const recvEl = $('pay-recv');
+    if (recvEl) recvEl.value = '';
+    const changeEl = $('pay-change');
+    if (changeEl) changeEl.classList.add('hidden');
+    const methEl = $('pay-meth');
+    if (methEl) methEl.value = 'efectivo';
+    const oidEl = $('pay-oid');
+    if (oidEl) oidEl.value = orderId;
+    const printEl = $('pay-print-opt');
+    if (printEl) printEl.value = 'none';
+
     document.querySelectorAll('.print-opt-btn').forEach(b => b.classList.remove('active'));
-    const noneBtn = document.getElementById('print-none');
+    const noneBtn = $('print-none');
     if (noneBtn) noneBtn.classList.add('active');
-    // Guardar datos del pedido para impresión posterior
-    State._lastPaidOrder = order;
+
+    State._lastPaidOrder = { ...order, items };
     openModal('modal-pay');
-  } catch (err) { toast(err.message,'error'); }
+  } catch (err) {
+    console.error('[openPayModal]', err);
+    toast(err.message || 'Error al abrir el modal de pago','error');
+  }
 }
 function calcChange() {
   const oid = parseInt($('pay-oid').value);
