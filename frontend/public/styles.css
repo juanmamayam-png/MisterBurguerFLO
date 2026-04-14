@@ -1283,3 +1283,40 @@ h1,h2,h3,h4{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
   text-align: center;
   margin-top: 8px;
 }
+
+/* ═══════════════════════════════════════════════
+   REPORTES — Tabs de período
+═══════════════════════════════════════════════ */
+.rtabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.rtab-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-m);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+}
+.rtab-btn i { font-size: 13px; }
+.rtab-btn:hover {
+  border-color: var(--acc);
+  color: var(--text);
+  background: var(--bg-3);
+}
+.rtab-btn.active {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--bg);
+}
