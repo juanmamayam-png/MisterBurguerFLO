@@ -153,9 +153,11 @@ router.get('/:id/products', auth, requireRole('boss'), validId, async (req, res)
       FROM order_items oi
       JOIN products p  ON p.id  = oi.product_id
       JOIN orders   o  ON o.id  = oi.order_id
+      JOIN tables   t  ON t.id  = o.table_id
       WHERE o.day_id = $1
         AND o.status  = 'paid'
         AND oi.status = 'active'
+        AND t.table_type != 'cena_empleados'
       GROUP BY p.id, p.name, p.category, p.emoji
       ORDER BY units_sold DESC, total_revenue DESC
     `, [id]);
