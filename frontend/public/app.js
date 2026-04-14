@@ -2,8 +2,8 @@
 
 const CAT_EMOJI = { Hamburguesas:'🍔', Especiales:'🥩', 'Hot Dog':'🌭', Bebidas:'🥤', Infantil:'🍟', Entradas:'🥗' };
 const BURGER_CATS_BREAD = ['Hamburguesas','Especiales','Hot Dog']; // categorías con opción pan/plátano
-const TABLE_TYPE_LABELS = { mesa:'Mesa', domicilio:'Domicilio', para_llevar:'Para llevar' };
-const TABLE_TYPE_ICONS  = { mesa:'🪑', domicilio:'🛵', para_llevar:'🥡' };
+const TABLE_TYPE_LABELS = { mesa:'Mesa', domicilio:'Domicilio', para_llevar:'Para llevar', cena_empleados:'Cena Empleados' };
+const TABLE_TYPE_ICONS  = { mesa:'🪑', domicilio:'🛵', para_llevar:'🥡', cena_empleados:'🍽️' };
 const $ = id => document.getElementById(id);
 
 /* ─────────────────────────────────────────────
@@ -626,6 +626,7 @@ function renderOrderPanelHTML(table, order, isBoss) {
     <div class="order-side-header">
       <div>
         <h3>${table.table_type==='mesa'?`Mesa ${table.number}`:(TABLE_TYPE_LABELS[table.table_type]||table.table_type)+' '+table.number} <span style="font-size:13px;color:var(--text-m)">${table.table_type==='mesa'?`Piso ${table.floor}`:''}</span></h3>
+        ${table.table_type==='cena_empleados'&&order?.employee_name?`<div style="font-size:13px;color:var(--acc);font-weight:700;margin-top:2px"><i class="fa-solid fa-user"></i> ${order.employee_name}</div>`:''}
         <p style="font-size:12px;color:var(--text-m);margin-top:2px">
           ${order ? `Pedido #${order.id}` : 'Sin pedido activo'}
           ${isPending ? `<span class="badge badge-yellow" style="margin-left:6px"><i class="fa-solid fa-lock"></i> Cobro pendiente</span>` : ''}
@@ -749,15 +750,71 @@ function renderOrderSection(c) {
 /* ─────────────────────────────────────────────
    ORDER MANAGEMENT
 ───────────────────────────────────────────── */
-async function createOrder(tableId) {
+async function createOrder(tableId, employeeName) {
+  // Verificar local abierto (excepto jefe)
+  if (!State.currentDay && State.user.role !== 'boss') {
+    toast('El local está cerrado. No se pueden tomar pedidos. 🔒', 'error');
+    return;
+  }
+  const t = State.tables.find(x => x.id === tableId);
+  // Mesa CENA EMPLEADOS — pedir nombre si no viene ya
+  if (t?.table_type === 'cena_empleados' && !employeeName) {
+    openEmployeeModal(tableId);
+    return;
+  }
   try {
-    const order = await API.createOrder(tableId);
+    const body = { table_id: tableId };
+    if (employeeName) body.employee_name = employeeName;
+    const order = await API.createOrderWithData(body);
     State.activeOrder = { ...order, items: [] };
     State.tables = await API.getTables();
     toast('Pedido creado ✅','success');
-    const t = State.tables.find(x => x.id === tableId);
-    const osp = $('order-side-panel'); if (osp && t) { osp.innerHTML = renderOrderPanelHTML(t, State.activeOrder, State.user.role==='boss'); renderOrderProds(); }
+    const tbl = State.tables.find(x => x.id === tableId);
+    const osp = $('order-side-panel');
+    if (osp && tbl) { osp.innerHTML = renderOrderPanelHTML(tbl, State.activeOrder, State.user.role==='boss'); renderOrderProds(); }
   } catch (err) { toast(err.message,'error'); }
+}
+
+// Modal para pedir el nombre del empleado
+function openEmployeeModal(tableId) {
+  const modal = document.createElement('div');
+  modal.id = 'modal-employee-tmp';
+  modal.className = 'modal-wrap';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:2000';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:360px;width:90%">
+      <div class="mh">
+        <h3><i class="fa-solid fa-utensils" style="color:var(--acc)"></i> Cena Empleados</h3>
+      </div>
+      <div class="mb">
+        <p style="font-size:14px;color:var(--text-m);margin-bottom:12px">
+          Ingresa tu nombre para identificar tu pedido en cocina.
+        </p>
+        <div class="field-g">
+          <label>Tu nombre</label>
+          <input id="employee-name-input" class="field-c" type="text"
+            placeholder="Ej: Carlos, María…" maxlength="50"
+            onkeydown="if(event.key==='Enter') confirmEmployeeName(${tableId})"
+            autocomplete="off">
+        </div>
+      </div>
+      <div class="mf">
+        <button class="pill-btn pill-btn--green full" onclick="confirmEmployeeName(${tableId})">
+          <i class="fa-solid fa-check"></i> Confirmar y crear pedido
+        </button>
+        <button class="pill-btn" onclick="this.closest('#modal-employee-tmp').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => $('employee-name-input')?.focus(), 100);
+}
+
+function confirmEmployeeName(tableId) {
+  const name = ($('employee-name-input')?.value || '').trim();
+  if (!name) { toast('Debes escribir tu nombre','error'); return; }
+  const modal = document.getElementById('modal-employee-tmp');
+  if (modal) modal.remove();
+  createOrder(tableId, name);
 }
 
 // Forzar liberación de mesa — SOLO JEFE (estado inconsistente)
@@ -1153,12 +1210,13 @@ async function openCloseDayModal() {
         <i class="fa-solid fa-clock"></i> Apertura: ${fmtTime(d.opened_at)}
       </p>`;
 
-    // Cargar ventas por producto
+    // Cargar ventas por producto — usar id verificado
+    const dayId = d.id;
     const cpEl = $('close-products');
-    if (cpEl) {
+    if (cpEl && dayId) {
       cpEl.innerHTML = `<div style="color:var(--text-m);font-size:13px;padding:8px 0"><i class="fa-solid fa-spinner fa-spin"></i> Cargando detalle de productos…</div>`;
       try {
-        const products = await API.getDayProducts(d.id);
+        const products = await API.getDayProducts(dayId);
         if (products.length === 0) {
           cpEl.innerHTML = `<div style="color:var(--text-m);font-size:13px;padding:8px 0">Sin ventas registradas en esta jornada.</div>`;
         } else {
