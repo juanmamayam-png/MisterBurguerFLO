@@ -358,6 +358,7 @@ const API = {
     }
   },
   createOrder(table_id)            { return post('/orders', { table_id }); },
+  createOrderWithData(data)        { return post('/orders', data); },
   addItem(orderId, data)           { return post(`/orders/${orderId}/items`, data); },
   updateItem(orderId, itemId, st)  { return patch(`/orders/${orderId}/items/${itemId}`, { status: st }); },
   requestPayment(orderId)          { return patch(`/orders/${orderId}/request-payment`); },
@@ -371,6 +372,7 @@ const API = {
   getCurrentDay()                 { return get('/days/current'); },
   openDay(investments, open_notes){ return post('/days', { investments, open_notes }); },
   closeDay(id, close_notes)       { return patch(`/days/${id}/close`, { close_notes }); },
+  getDayProducts(id)              { return get(`/days/${id}/products`); },
 
   // USERS
   getUsers()               { return get('/users'); },
