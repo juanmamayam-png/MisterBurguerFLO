@@ -78,7 +78,8 @@ router.get('/:id', auth, validId, async (req,res) => {
 
 // POST /api/orders — crear pedido
 router.post('/', auth, requireRole('waiter','boss'), validators.createOrder, async (req,res) => {
-  const table_id = parseInt(req.body.table_id);
+  const table_id     = parseInt(req.body.table_id);
+  const employee_name = (req.body.employee_name || '').trim().slice(0,100) || null;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -88,11 +89,23 @@ router.post('/', auth, requireRole('waiter','boss'), validators.createOrder, asy
     if (table.status!=='free') return await rollbackRes(client,res,409,`La mesa ${table.number} (Piso ${table.floor}) no está libre`);
     const dup = await client.query(`SELECT id FROM orders WHERE table_id=$1 AND status IN ('active','pending') LIMIT 1`,[table_id]);
     if (dup.rows.length>0) return await rollbackRes(client,res,409,'Ya existe un pedido activo en esta mesa');
+
+    // Verificar que el local esté abierto (excepto para jefe y mesa cena empleados)
     const dRes = await client.query(`SELECT id FROM work_days WHERE status='open' ORDER BY id DESC LIMIT 1`);
     const day_id = dRes.rows[0]?.id || null;
+    if (!day_id && req.user.role !== 'boss') {
+      return await rollbackRes(client,res,409,'El local está cerrado. No se pueden tomar pedidos.');
+    }
+
+    // Mesa CENA EMPLEADOS requiere nombre del empleado
+    if (table.table_type === 'cena_empleados' && !employee_name) {
+      return await rollbackRes(client,res,400,'Debes ingresar tu nombre para la Cena de Empleados.');
+    }
+
     const oRes = await client.query(
-      `INSERT INTO orders (table_id,waiter_id,day_id,status) VALUES ($1,$2,$3,'active') RETURNING *`,
-      [table_id, req.user.id, day_id]);
+      `INSERT INTO orders (table_id,waiter_id,day_id,status,employee_name)
+       VALUES ($1,$2,$3,'active',$4) RETURNING *`,
+      [table_id, req.user.id, day_id, employee_name]);
     await client.query(`UPDATE tables SET status='occupied' WHERE id=$1`,[table_id]);
     await client.query('COMMIT');
     res.status(201).json(oRes.rows[0]);
