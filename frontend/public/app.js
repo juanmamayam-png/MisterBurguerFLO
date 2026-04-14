@@ -990,6 +990,14 @@ async function openPayModal(orderId) {
     if (shortEl) shortEl.classList.add('hidden');
 
     State._lastPaidOrder = { ...order, items };
+    // Ocultar método de pago para cena empleados (es gasto empresa, no cobro real)
+    const isCenaEmp = order.table_type === 'cena_empleados';
+    const methSection = $('pay-meth')?.closest('.field-g');
+    if (methSection) methSection.style.display = isCenaEmp ? 'none' : '';
+    const cashSection = $('pay-cash-section');
+    if (cashSection) cashSection.style.display = 'none';
+    const printSection = document.querySelector('#modal-pay .field-g.mt-s:last-of-type');
+    if (printSection) printSection.style.display = isCenaEmp ? 'none' : '';
     openModal('modal-pay');
   } catch (err) {
     console.error('[openPayModal]', err);
@@ -1267,6 +1275,60 @@ async function openCloseDayModal() {
       } catch {
         cpEl.innerHTML = `<div style="color:var(--red);font-size:13px;padding:8px 0">No se pudo cargar el detalle de productos.</div>`;
       }
+    }
+
+    // Cargar resumen de cenas de empleados
+    const cenaEl = $('close-cena');
+    if (cenaEl && dayId) {
+      try {
+        const token = TokenStore.get();
+        const cr = await fetch(`/api/days/${dayId}/cena`, {
+          headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store'
+        });
+        if (cr.ok) {
+          const { cenas, total_gasto } = await cr.json();
+          if (cenas.length > 0) {
+            cenaEl.innerHTML = `
+              <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+                <div style="font-size:12px;font-weight:800;text-transform:uppercase;
+                            letter-spacing:.5px;color:var(--text-m);margin-bottom:8px">
+                  <i class="fa-solid fa-utensils" style="color:var(--yellow)"></i>
+                  Cenas de empleados — Gasto empresa
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  <thead>
+                    <tr style="background:var(--bg-2)">
+                      <th style="text-align:left;padding:6px 8px;color:var(--text-m)">Empleado</th>
+                      <th style="text-align:left;padding:6px 8px;color:var(--text-m)">Lo que cenó</th>
+                      <th style="text-align:right;padding:6px 8px;color:var(--text-m)">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${cenas.map((c,i) => `
+                      <tr style="background:${i%2===0?'transparent':'var(--bg-1)'}">
+                        <td style="padding:6px 8px;font-weight:700;color:var(--text)">${c.employee_name||'Sin nombre'}</td>
+                        <td style="padding:6px 8px;color:var(--text-m);font-size:11px">
+                          ${(c.items||[]).map(it=>`${it.name} ×${it.qty}`).join(', ')}
+                        </td>
+                        <td style="padding:6px 8px;text-align:right;color:var(--yellow);font-weight:700">${fmtCOP(c.total)}</td>
+                      </tr>`).join('')}
+                  </tbody>
+                  <tfoot>
+                    <tr style="border-top:2px solid var(--border)">
+                      <td colspan="2" style="padding:7px 8px;font-weight:700;color:var(--text)">
+                        Total gasto empresa
+                      </td>
+                      <td style="padding:7px 8px;text-align:right;font-weight:800;
+                                 color:var(--red);font-size:15px">${fmtCOP(total_gasto)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>`;
+          } else {
+            cenaEl.innerHTML = '';
+          }
+        }
+      } catch(e) { /* silencioso */ }
     }
 
     $('close-notes').value = '';
@@ -1762,10 +1824,11 @@ function _renderKitchenOrders(orders) {
   // Función para renderizar una tarjeta de pedido mostrando comida y/o bebidas
   function renderKoCard(o, showFood, showDrinks) {
     const ttype = o.table_type || 'mesa';
-    const tLabel = ttype==='mesa' ? `Mesa ${o.table_number} · Piso ${o.table_floor}`
-                  : ttype==='domicilio' ? `Domicilio ${o.table_number}`
+    const tLabel = ttype==='mesa'           ? `Mesa ${o.table_number} · Piso ${o.table_floor}`
+                  : ttype==='domicilio'      ? `Domicilio ${o.table_number}`
+                  : ttype==='cena_empleados' ? (o.employee_name || 'Empleado')
                   : `Para llevar ${o.table_number}`;
-    const tIcon = {mesa:'🪑', domicilio:'🛵', para_llevar:'🥡'}[ttype] || '🪑';
+    const tIcon = {mesa:'🪑', domicilio:'🛵', para_llevar:'🥡', cena_empleados:'🍽️'}[ttype] || '🍽️';
     const allActive = (o.items||[]).filter(i => i.status==='active');
     const foodItems  = allActive.filter(i => !isBev(i.category));
     const drinkItems = allActive.filter(i =>  isBev(i.category));
