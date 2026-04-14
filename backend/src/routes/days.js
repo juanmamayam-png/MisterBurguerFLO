@@ -199,4 +199,179 @@ router.get('/:id/cena', auth, requireRole('boss'), validId, async (req, res) => 
   }
 });
 
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/days/summary/weekly  — Resumen semanal (últimas 12 semanas)
+// GET /api/days/summary/monthly — Resumen mensual (últimos 24 meses)
+// GET /api/days/summary/annual  — Resumen anual
+// ══════════════════════════════════════════════════════════════
+
+// Helper: agrega métricas de un grupo de jornadas
+async function aggregatePeriod(rows) {
+  return {
+    total_sales:      rows.reduce((s,d) => s + parseInt(d.total_sales||0), 0),
+    total_cost:       rows.reduce((s,d) => s + parseInt(d.total_cost||0), 0),
+    gross_profit:     rows.reduce((s,d) => s + parseInt(d.gross_profit||0), 0),
+    total_investment: rows.reduce((s,d) => s + parseInt(d.total_investment||0), 0),
+    net_profit:       rows.reduce((s,d) => s + parseInt(d.net_profit||0), 0),
+    paid_orders:      rows.reduce((s,d) => s + parseInt(d.paid_orders_count||0), 0),
+    days_count:       rows.length,
+    cena_gasto:       rows.reduce((s,d) => s + parseInt(d.cena_gasto||0), 0),
+  };
+}
+
+// Query base: todas las jornadas cerradas con sus métricas
+async function getAllDaysMetrics() {
+  const r = await query(`
+    SELECT d.id, d.opened_at, d.closed_at, d.status,
+      COALESCE(SUM(CASE WHEN t.type='income'  THEN t.amount ELSE 0 END),0) AS total_sales,
+      COALESCE(SUM(CASE WHEN t.type='income'  THEN t.cost   ELSE 0 END),0) AS total_cost,
+      COALESCE(SUM(CASE WHEN t.type='income'  THEN t.profit ELSE 0 END),0) AS gross_profit,
+      COALESCE(SUM(CASE WHEN t.type='expense' AND t.method='cena_empleados' THEN t.amount ELSE 0 END),0) AS cena_gasto,
+      COALESCE(SUM(CASE WHEN t.type='expense' AND t.method!='cena_empleados' THEN t.amount ELSE 0 END),0) AS total_investment,
+      COUNT(CASE WHEN t.type='income' THEN 1 END) AS paid_orders_count
+    FROM work_days d
+    LEFT JOIN transactions t ON t.day_id = d.id
+    WHERE d.status = 'closed'
+    GROUP BY d.id
+    ORDER BY d.opened_at ASC
+  `);
+  return r.rows.map(d => ({
+    ...d,
+    net_profit: parseInt(d.gross_profit) - parseInt(d.total_investment) - parseInt(d.cena_gasto),
+  }));
+}
+
+// Productos más vendidos de un conjunto de day_ids
+async function getTopProducts(dayIds, limit=10) {
+  if (!dayIds.length) return [];
+  const placeholders = dayIds.map((_,i) => `$${i+1}`).join(',');
+  const r = await query(`
+    SELECT p.name, p.emoji, p.category,
+      SUM(oi.quantity) AS units_sold,
+      SUM(oi.quantity * oi.unit_price) AS total_revenue,
+      SUM(oi.quantity * (oi.unit_price - oi.unit_cost)) AS total_profit
+    FROM order_items oi
+    JOIN orders   o ON o.id = oi.order_id
+    JOIN products p ON p.id = oi.product_id
+    JOIN tables   t ON t.id = o.table_id
+    WHERE o.day_id IN (${placeholders})
+      AND o.status  = 'paid'
+      AND oi.status = 'active'
+      AND t.table_type != 'cena_empleados'
+    GROUP BY p.id, p.name, p.emoji, p.category
+    ORDER BY units_sold DESC, total_revenue DESC
+    LIMIT ${limit}
+  `, dayIds);
+  return r.rows;
+}
+
+// GET /api/days/summary/weekly
+router.get('/summary/weekly', auth, requireRole('boss'), async (req, res) => {
+  try {
+    const days = await getAllDaysMetrics();
+    // Agrupar por semana ISO (lunes a domingo)
+    const weeks = {};
+    for (const d of days) {
+      const dt = new Date(d.opened_at);
+      // Calcular lunes de esa semana
+      const dow = dt.getDay() === 0 ? 6 : dt.getDay() - 1; // 0=lun
+      const monday = new Date(dt);
+      monday.setDate(dt.getDate() - dow);
+      monday.setHours(0,0,0,0);
+      const key = monday.toISOString().slice(0,10);
+      if (!weeks[key]) weeks[key] = { week_start: key, days: [] };
+      weeks[key].days.push(d);
+    }
+    // Convertir a array con métricas y los últimos 12 periodos
+    const result = [];
+    for (const [key, w] of Object.entries(weeks)) {
+      const metrics = await aggregatePeriod(w.days);
+      const dayIds  = w.days.map(d => d.id);
+      const top     = await getTopProducts(dayIds, 5);
+      const endDate = new Date(key);
+      endDate.setDate(endDate.getDate() + 6);
+      result.push({
+        label:      `Sem. ${key} — ${endDate.toISOString().slice(0,10)}`,
+        week_start: key,
+        week_end:   endDate.toISOString().slice(0,10),
+        day_ids:    dayIds,
+        top_products: top,
+        ...metrics,
+      });
+    }
+    result.sort((a,b) => b.week_start.localeCompare(a.week_start));
+    res.json(result.slice(0, 12));
+  } catch(err) {
+    console.error('[Days GET /summary/weekly]', err.message);
+    res.status(500).json({ error: 'Error al obtener resumen semanal' });
+  }
+});
+
+// GET /api/days/summary/monthly
+router.get('/summary/monthly', auth, requireRole('boss'), async (req, res) => {
+  try {
+    const days = await getAllDaysMetrics();
+    const months = {};
+    for (const d of days) {
+      const dt  = new Date(d.opened_at);
+      const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+      if (!months[key]) months[key] = { key, days: [] };
+      months[key].days.push(d);
+    }
+    const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const result = [];
+    for (const [key, m] of Object.entries(months)) {
+      const [yr, mo] = key.split('-').map(Number);
+      const metrics  = await aggregatePeriod(m.days);
+      const dayIds   = m.days.map(d => d.id);
+      const top      = await getTopProducts(dayIds, 5);
+      result.push({
+        label:    `${MONTH_NAMES[mo-1]} ${yr}`,
+        year:     yr, month: mo, key,
+        day_ids:  dayIds,
+        top_products: top,
+        ...metrics,
+      });
+    }
+    result.sort((a,b) => b.key.localeCompare(a.key));
+    res.json(result.slice(0, 24));
+  } catch(err) {
+    console.error('[Days GET /summary/monthly]', err.message);
+    res.status(500).json({ error: 'Error al obtener resumen mensual' });
+  }
+});
+
+// GET /api/days/summary/annual
+router.get('/summary/annual', auth, requireRole('boss'), async (req, res) => {
+  try {
+    const days = await getAllDaysMetrics();
+    const years = {};
+    for (const d of days) {
+      const yr = new Date(d.opened_at).getFullYear();
+      if (!years[yr]) years[yr] = { year: yr, days: [] };
+      years[yr].days.push(d);
+    }
+    const result = [];
+    for (const [yr, y] of Object.entries(years)) {
+      const metrics = await aggregatePeriod(y.days);
+      const dayIds  = y.days.map(d => d.id);
+      const top     = await getTopProducts(dayIds, 10);
+      result.push({
+        label: `Año ${yr}`,
+        year:  parseInt(yr),
+        day_ids: dayIds,
+        top_products: top,
+        ...metrics,
+      });
+    }
+    result.sort((a,b) => b.year - a.year);
+    res.json(result);
+  } catch(err) {
+    console.error('[Days GET /summary/annual]', err.message);
+    res.status(500).json({ error: 'Error al obtener resumen anual' });
+  }
+});
+
 module.exports = router;
