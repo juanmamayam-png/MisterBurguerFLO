@@ -1658,12 +1658,14 @@ async function promptNewUser() {
    REPORTS
 ───────────────────────────────────────────── */
 // ── Helper: render una tarjeta de jornada con productos ──────────
-function _renderDayCard(d, prods) {
+function _renderDayCard(d, prods, cenaData) {
   const net = d.net_profit || 0;
+  cenaData = cenaData || { cenas:[], total_gasto:0 };
+
   const prodsHTML = prods && prods.length ? `
     <div class="rcard-prods">
       <div class="rcard-prods-title">
-        <i class="fa-solid fa-chart-bar"></i> Productos vendidos en esta jornada
+        <i class="fa-solid fa-chart-bar"></i> Productos vendidos a clientes
       </div>
       <table class="rcard-prods-table">
         <thead>
@@ -1685,6 +1687,45 @@ function _renderDayCard(d, prods) {
               <td class="rp-profit" style="color:${parseInt(p.total_profit)>=0?'var(--green)':'var(--red)'}">${fmtCOP(p.total_profit)}</td>
             </tr>`).join('')}
         </tbody>
+      </table>
+    </div>` : '';
+
+  const cenaHTML = cenaData.cenas && cenaData.cenas.length ? `
+    <div class="rcard-prods" style="margin-top:14px">
+      <div class="rcard-prods-title" style="color:var(--yellow)">
+        <i class="fa-solid fa-utensils"></i> Cenas de empleados — Gasto empresa
+        <span style="margin-left:auto;font-size:12px;color:var(--red);font-weight:800">
+          Total: ${fmtCOP(cenaData.total_gasto)}
+        </span>
+      </div>
+      <table class="rcard-prods-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Empleado</th>
+            <th style="text-align:left">Lo que cenó</th>
+            <th style="text-align:right">Total cena</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cenaData.cenas.map((c,i) => `
+            <tr class="${i%2===0?'':'rp-alt'}">
+              <td class="rp-name" style="color:var(--yellow)">${c.employee_name||'Sin nombre'}</td>
+              <td class="rp-cat" style="font-size:12px">
+                ${(c.items||[]).map(it=>`${it.name} ×${it.qty}`).join(' · ')}
+              </td>
+              <td class="rp-rev" style="color:var(--red);font-weight:700">${fmtCOP(c.total)}</td>
+            </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border)">
+            <td colspan="2" style="padding:7px 10px;font-weight:700;color:var(--text)">
+              Total gasto empresa en cenas
+            </td>
+            <td style="padding:7px 10px;text-align:right;font-weight:800;color:var(--red);font-size:15px">
+              ${fmtCOP(cenaData.total_gasto)}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>` : '';
 
@@ -1711,6 +1752,7 @@ function _renderDayCard(d, prods) {
       ${d.investments.map(i=>`<div class="ri"><span>${i.description}</span><span style="color:var(--yellow);font-family:'DM Mono',monospace">${fmtCOP(i.amount)}</span></div>`).join('')}
     </div>`:''}
     ${prodsHTML}
+    ${cenaHTML}
   </div>`;
 }
 
@@ -1739,15 +1781,18 @@ async function renderReports(c) {
            </div>`
       }`;
 
-    // Cargar productos de cada jornada de forma asíncrona y renderizar una a una
+    // Cargar productos y cenas de cada jornada de forma asíncrona
     for (const d of days) {
       const slot = document.getElementById(`rcard-${d.id}`);
       if (!slot) continue;
       try {
-        const prods = await API.getDayProducts(d.id).catch(() => []);
-        slot.outerHTML = _renderDayCard(d, prods);
+        const [prods, cenaData] = await Promise.all([
+          API.getDayProducts(d.id).catch(() => []),
+          API.getDayCena(d.id).catch(() => ({ cenas:[], total_gasto:0 })),
+        ]);
+        slot.outerHTML = _renderDayCard(d, prods, cenaData);
       } catch {
-        slot.outerHTML = _renderDayCard(d, []);
+        slot.outerHTML = _renderDayCard(d, [], { cenas:[], total_gasto:0 });
       }
     }
 
