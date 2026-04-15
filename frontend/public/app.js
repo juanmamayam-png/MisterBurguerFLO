@@ -443,19 +443,86 @@ function renderClientMenu() {
     if (_mFilter !== 'all' && p.category !== _mFilter) return false;
     if (_mSearch) { const q = _mSearch.toLowerCase(); return p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q); }
     return true;
-  }).sort((a, b) => a.price - b.price);  // ordenar de menor a mayor precio
+  }).sort((a, b) => a.price - b.price);
+
   grid.innerHTML = products.map((p,i) => `
-    <div class="pc" style="animation-delay:${Math.min(i,8)*.05}s">
+    <div class="pc" style="animation-delay:${Math.min(i,8)*.05}s" onclick="openProductModal(${p.id})" tabindex="0" role="button" aria-label="${p.name}">
       <div class="pc__img">
         ${p.image ? `<img class="prod-img-real" src="${p.image}" alt="${p.name}" loading="lazy">` : `<div class="pc__img-emoji">${p.emoji}</div>`}
         <span class="pc__cat ${getCatClass(p.category)}">${p.category}</span>
+        <div class="pc__zoom-hint"><i class="fa-solid fa-magnifying-glass-plus"></i></div>
       </div>
       <div class="pc__body">
         <div class="pc__name">${p.name}</div>
         <div class="pc__desc">${p.description||''}</div>
-        <div class="pc__footer"><span class="pc__price">${fmtCOP(p.price)}</span><span class="pc__combo">Combo +$10.000</span></div>
+        <div class="pc__footer">
+          <span class="pc__price">${fmtCOP(p.price)}</span>
+          <span class="pc__combo">Combo +$10.000</span>
+        </div>
       </div>
     </div>`).join('');
+}
+
+function openProductModal(pid) {
+  const p = State.products.find(x => x.id === pid);
+  if (!p) return;
+
+  // Remove any existing modal
+  const existing = document.getElementById('pm-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'pm-overlay';
+  overlay.innerHTML = `
+    <div class="pm-backdrop" onclick="closeProductModal()"></div>
+    <div class="pm-card" role="dialog" aria-modal="true">
+      <button class="pm-close" onclick="closeProductModal()" aria-label="Cerrar">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="pm-img">
+        ${p.image
+          ? `<img src="${p.image}" alt="${p.name}">`
+          : `<div class="pm-emoji">${p.emoji}</div>`}
+        <span class="pm-cat ${getCatClass(p.category)}">${p.category}</span>
+      </div>
+      <div class="pm-body">
+        <h2 class="pm-name">${p.name}</h2>
+        ${p.description ? `<p class="pm-desc">${p.description}</p>` : ''}
+        <div class="pm-price-row">
+          <span class="pm-price">${fmtCOP(p.price)}</span>
+          <span class="pm-combo">Combo +$10.000</span>
+        </div>
+        ${(p.category==='Hamburguesas'||p.category==='Especiales'||p.category==='Hot Dog') ? `
+          <div class="pm-bread-row">
+            <span class="pm-bread-label">Elige tu pan:</span>
+            <span class="pm-bread-opt">🍞 Pan artesanal</span>
+            <span class="pm-bread-opt">🍌 Plátano <span style="color:var(--acc);font-size:11px">+$1.000</span></span>
+          </div>` : ''}
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    overlay.classList.add('pm-visible');
+    overlay.querySelector('.pm-card').classList.add('pm-card-in');
+  });
+
+  // Close on Escape
+  overlay._escHandler = (e) => { if (e.key === 'Escape') closeProductModal(); };
+  document.addEventListener('keydown', overlay._escHandler);
+}
+
+function closeProductModal() {
+  const overlay = document.getElementById('pm-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('pm-visible');
+  overlay.classList.add('pm-closing');
+  const card = overlay.querySelector('.pm-card');
+  if (card) { card.classList.remove('pm-card-in'); card.classList.add('pm-card-out'); }
+  document.removeEventListener('keydown', overlay._escHandler);
+  setTimeout(() => overlay.remove(), 320);
 }
 
 /* ─────────────────────────────────────────────
